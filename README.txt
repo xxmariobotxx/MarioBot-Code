@@ -1,7 +1,7 @@
 MarioBot v1.0
 
 FIRST AND FOREMOST: This script is not complete yet as evidenced by 'test' on the file Mariobot-V1-test.lua, but the program should work as it stands now. This repo is available for anyone to dowload and run on their machines, systems, computers, or
-(my favorite), boxes. Credit where credit is due: This program was first written by Sethbling with MarI/O, updated by Akisame with LuigI/O, and it is my quest to revive this bot that was online and ended in 2018. I stream this bot on https://twitch.tv/xxmariobot where I have it complete rom hacks.
+(my favorite), boxes. Credit where credit is due: This program was first written by Sethbling with MarI/O, updated by Akisame with LuigI/O, and it is my quest to revive this bot that was online and ended in 2020. I stream this bot on https://twitch.tv/xxmariobot where I have it complete rom hacks.
 
 
 An AI to play Super Mario Bros and Lost Levels
