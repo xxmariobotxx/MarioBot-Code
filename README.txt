@@ -1,4 +1,8 @@
-LuigI/O b4.1
+MarioBot v1.0
+
+FIRST AND FOREMOST: This script is not complete yet as evidenced by 'test' on the file Mariobot-V1-test.lua, but the program should work as it stands now. This repo is available for anyone to dowload and run on their machines, systems, computers, or
+(my favorite), boxes. Credit where credit is due: This program was first written by Sethbling with MarI/O, updated by Akisame. It is my quest to revive this bot that was online and ended in 2018. I stream this bot on https://twitch.tv/xxmariobot where I have it complete rom hacks.
+
 
 An AI to play Super Mario Bros and Lost Levels
 
@@ -7,7 +11,7 @@ To run, first set up a savestate in slot 1 (or in any other slot, the used slot 
 Make sure to set LostLevels to 1 if playing lost levels, and 0 otherwise.
 Set Player to 2 if playing as Luigi in SMB1, and 1 otherwise.
 
-Open the Lua script "luigio-launcher.lua" to start.
+Open the Lua script "mariobot-launcher.lua" to start.
 
 Buttons:
 A - activates the generation stats bar at the top
