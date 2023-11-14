@@ -1,0 +1,2 @@
+Gen: 0     Spec: 8     Gnm: 1     Fitness: 255.00     Time: 0m19s
+Gen: 1     Spec: 453   Gnm: 4     Fitness: 394.00     Time: 41m48s
