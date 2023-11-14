@@ -1500,7 +1500,32 @@ function writeBreakthroughOutput()
     local species = pool.species[pool.currentSpecies]
     local genome = species.genomes[pool.currentGenome]
 
-    local seconds = pool.realTime
+    local info = string.format("Gen: %-5d Spec: %-5d Gnm: %-5d Gsid: %-5d Fitness: %-10.2f Time: %s", --Rewrote the text display to make it more regular/pretty
+        pool.generation,
+        pool.currentSpecies,
+        pool.currentGenome,
+        species.gsid,
+        genome.fitstate.fitness,
+        formatTime(pool.realTime)
+    )
+
+    pool.history = pool.history .. info .. "\n"
+
+    local fileFTracker = io.open("fitnesstracker.txt", "w")
+    if fileFTracker then
+        fileFTracker:write(pool.history)
+        fileFTracker:close()
+    else
+        print("Error opening file fitnesstracker.txt")
+    end
+
+    pool.breakthroughX = marioX
+    pool.breakthroughZ = genome.fitstate.area
+
+    indicatorOutput()
+end 
+
+function formatTime(seconds)
     local minutes = math.floor(seconds / 60)
     seconds = seconds - minutes * 60
     local hours = math.floor(minutes / 60)
@@ -1508,33 +1533,14 @@ function writeBreakthroughOutput()
     local days = math.floor(hours / 24)
     hours = hours - days * 24
 
-    local timeString
-    if seconds < 3600 then
-        timeString = string.format("%dm%02ds", minutes, seconds)
-    elseif seconds < 86400 then
-        timeString = string.format("%dh%02dm", hours, minutes)
+    if days > 0 then
+        return string.format("%dd%02dh", days, hours)
+    elseif hours > 0 then
+        return string.format("%dh%02dm", hours, minutes)
     else
-        timeString = string.format("%dd%02dh", days, hours)
+        return string.format("%dm%02ds", minutes, seconds)
     end
-
-    local info = string.format("Gen: %-5d Spec: %-5d Gnm: %-5d Fitness: %-10.2f Time: %s",
-        pool.generation,
-        pool.currentSpecies,
-        pool.currentGenome,
-        genome.fitstate.fitness,
-        timeString
-    )
-
-    pool.history = pool.history .. info .. "\n"
-    fileFTracker = io.open("fitnesstracker.txt", "w")
-    fileFTracker:write(pool.history)
-    fileFTracker:close()
-
-    pool.breakthroughX = marioX
-    pool.breakthroughZ = genome.fitstate.area
-
-    indicatorOutput()
-end
+end --Took this out of the writeBreakthroughOutput function and made this it's own function to keep track of time elapsed when printing in function writeBreakThroughOutput
 
 function levelNameOutput()
 	getPositions()
