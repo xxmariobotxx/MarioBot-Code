@@ -1,4 +1,4 @@
-LostLevels = 1
+LostLevels = 0
 Player = 1
 
 savestateSlot = 1
@@ -63,7 +63,7 @@ FramesOfDeathAnimation = 50 --amount of the death animation to show
 FPS = 50+10*LostLevels
 
 TurboMin = 0
-TurboMax = 0
+TurboMax = 1
 CompleteAutoTurbo = false
 currentTurbo = false
 
@@ -1497,41 +1497,45 @@ function indicatorOutput()
 end
 
 function writeBreakthroughOutput()
-	local species = pool.species[pool.currentSpecies]
-	local genome = species.genomes[pool.currentGenome]
-	info = tostring(pool.generation)
-	for i=1,4-string.len(info) do info=info.." " end
-	info = info..tostring(pool.currentSpecies)
-	for i=1,9-string.len(info) do info=info.." " end
-	info = info..tostring(pool.currentGenome)
-	for i=1,13-string.len(info) do info=info.." " end
-	info = info..tostring(species.gsid)
-	for i=1,18-string.len(info) do info=info.." " end
-	info = info..tostring(genome.fitstate.fitness)
-	for i=1,23-string.len(info) do info=info.." " end
-	local seconds = pool.realTime
-	local minutes = math.floor(seconds/60)
-	seconds = seconds - minutes*60
-	local hours = math.floor(minutes/60)
-	minutes = minutes - hours*60
-	local days = math.floor(hours/24)
-	hours = hours - days*24
-	if pool.realTime < 3600 then
-		info=info..minutes.."m"..seconds.."s"
-	elseif pool.realTime < 86400 then
-		info=info..hours.."h"..minutes.."m"
-	else
-		info=info..days.."d"..hours.."h"
-	end
-	pool.history=pool.history..info.."\n"
-	fileFTracker = io.open("fitnesstracker.txt","w")
-	fileFTracker:write(pool.history)
-	fileFTracker:close()
-	
-	pool.breakthroughX = marioX
-	pool.breakthroughZ = genome.fitstate.area
-	
-	indicatorOutput()
+    local species = pool.species[pool.currentSpecies]
+    local genome = species.genomes[pool.currentGenome]
+
+    -- Format the information
+    local fitness = math.floor(genome.fitstate.fitness)
+    local info = string.format("Gen:%d  Spec:%d  Gnm:%d  GSID:%d  Fit:%d  Time:",
+        pool.generation, pool.currentSpecies, pool.currentGenome, species.gsid, fitness)
+
+    -- Format and append the time information
+    local seconds = pool.realTime
+    local minutes = math.floor(seconds / 60)
+    seconds = seconds - minutes * 60
+    local hours = math.floor(minutes / 60)
+    minutes = minutes - hours * 60
+    local days = math.floor(hours / 24)
+    hours = hours - days * 24
+
+    if pool.realTime < 3600 then
+        info = info .. string.format("%02dm%02ds", minutes, seconds)
+    elseif pool.realTime < 86400 then
+        info = info .. string.format("%02dh%02dm", hours, minutes)
+    else
+        info = info .. string.format("%dd%02dh", days, hours)
+    end
+
+    -- Append a newline to the history
+    pool.history = pool.history .. info .. "\n"
+
+    -- Write the history to the file
+    local fileFTracker = io.open("fitnesstracker.txt", "w")
+    fileFTracker:write(pool.history)
+    fileFTracker:close()
+
+    -- Set breakthrough coordinates
+    pool.breakthroughX = marioX
+    pool.breakthroughZ = genome.fitstate.area
+
+    -- Call the indicatorOutput function
+    indicatorOutput()
 end
 
 function levelNameOutput()
@@ -1883,7 +1887,17 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 					end
 					--draw the genome
 					color = opacity + color
-					gui.drawline(n1.x+2,n1.y,neuron.x-2,neuron.y, toRGBA(color))
+					if n1 and neuron then
+						if n1.x and neuron.x then
+							gui.drawline(n1.x+2,n1.y,neuron.x-2,neuron.y, toRGBA(color))
+						else
+							--Handle the case where either n1.x or neuron.x is nil
+							print("Warning: 'x' field is nil in either n1 or neuron. Skipping line drawing.")
+						end
+					else
+						--Handle the case where either n1 or neuron is nil
+						print("Warning: n1 or neuron is nil. Skipping line drawing.") --This should let the program keep running even when it can't draw the network. Seems to work
+					end
 				end
 			end
 		end
