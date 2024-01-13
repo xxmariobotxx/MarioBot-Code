@@ -1962,6 +1962,21 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 	end
 end
 
+function initializeBackupDirectory()
+    local directory = "backups"..dirsep..currentWorld.."-"..currentLevel
+    local command = ""
+
+    -- Check the operating system
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'mkdir "' .. directory .. '" > NUL 2>&1'  -- Command for Windows
+    else
+        command = 'mkdir -p "' .. directory .. '"'  -- Command for Unix/Linux
+    end
+
+    -- Execute the command to create the directory if it doesn't exist
+    os.execute(command)
+end
+
 function initLevel()
 	initPool()
 	local file = io.open("backups"..dirsep.."winners.txt","r")
@@ -1993,6 +2008,7 @@ function initLevel()
 end
 
 initLevel()
+initializeBackupDirectory()
 while true do
 	redospectop = pool.generation == 0
 	while not playGeneration(redospectop) do
@@ -2005,6 +2021,7 @@ while true do
 	savestateObj = savestate.object(savestateSlot)
 	savestate.save(savestateObj)
 	initLevel()
+	initializeBackupDirectory()
 end
 
 return true
