@@ -1467,17 +1467,6 @@ function deathCounterOutput()
 	fileAttempts:close()
 end
 
-function speciesDataOutput()
-	local species = pool.species[pool.currentSpecies]
-	speciesdata = "GSID: "..species.gsid.." SMax: "..species.maxFitness.." Stale: "..species.staleness
-	if species.nick ~= "" then
-		speciesdata = speciesdata.." Nick: "..species.nick
-	end
-	fileSData = io.open("speciesdata.txt","w")
-	fileSData:write(speciesdata)
-	fileSData:close()
-end
-
 function mapupdate()
 	io.open("../mapupdate.txt","w"):close()
 end
@@ -1496,14 +1485,40 @@ function indicatorOutput()
 	pcall(mapupdate)
 end
 
+local base64chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+local function toBase64(num)
+    local result = ''
+    repeat
+        local remainder = num % 64
+        result = string.sub(base64chars, remainder + 1, remainder + 1) .. result
+        num = math.floor(num / 64)
+    until num == 0
+    return result
+end
+
+function speciesDataOutput()
+	local species = pool.species[pool.currentSpecies]
+	local gsid_base64 = toBase64(tostring(species.gsid))
+	speciesdata = "GSID: "..gsid_base64.." SMax: "..species.maxFitness.." Stale: "..species.staleness
+	if species.nick ~= "" then
+		speciesdata = speciesdata.." Nick: "..species.nick
+	end
+	fileSData = io.open("speciesdata.txt","w")
+	fileSData:write(speciesdata)
+	fileSData:close()
+end
+
 function writeBreakthroughOutput()
     local species = pool.species[pool.currentSpecies]
     local genome = species.genomes[pool.currentGenome]
 
+    local gsid_base64 = toBase64(tostring(species.gsid)) --convert GSID numbers to a base64 number
+
     -- Format the information
     local fitness = math.floor(genome.fitstate.fitness)
-    local info = string.format("Gen:%d  Spec:%d  Gnm:%d  GSID:%d  Fit:%d  Time:",
-        pool.generation, pool.currentSpecies, pool.currentGenome, species.gsid, fitness)
+    local info = string.format("Gen:%d  Spec:%d  Gnm:%d  GSID:%s  Fit:%d  Time:",
+        pool.generation, pool.currentSpecies, pool.currentGenome, gsid_base64, fitness)
 
     -- Format and append the time information
     local seconds = pool.realTime
