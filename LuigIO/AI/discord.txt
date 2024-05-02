@@ -1,1 +1,0 @@
-<@&459702114709667860> LuigIO-V4.lua:1955: attempt to index local 'file' (a nil value)
