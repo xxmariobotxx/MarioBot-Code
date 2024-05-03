@@ -69,7 +69,7 @@ turbo.txt - the current set turbo range
 
 FILE:RECORD.PY
 
-I have included a functionality in this program to record (in OBS) when Mario beats a level. On completion, the program will toggle the recording button in OBS and will again toggle the recording button again when transitioning to the next level. I've included comments on what packages and plugins are needed for it to work within the program itself, and I will include it here.
+I have included a functionality in this program (LuigIO-V4.lua) to record (in OBS) when Mario beats a level. On completion, the program will toggle the recording button in OBS and will again toggle the recording button again when transitioning to the next level. This feature is commented out by default in the program, but can be enabled by uncommenting line 1379. I've included comments on what packages and plugins are needed for it to work within the program itself, and I will include it here.
 
 Packages: Run this command to install the necessary package
 pip install websockets
