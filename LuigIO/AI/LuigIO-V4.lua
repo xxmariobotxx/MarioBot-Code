@@ -1376,7 +1376,7 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			return false
 		end
 		if prelevel == 1 then --if he beats the level
-			os.execute("python3 record.py")
+			--os.execute("python3 record.py") --Uncomment this line if you want to use this to record the winning genome in OBS
 			genome.networks = {} --reset networks to save on RAM
 			pool.attempts = pool.attempts + 1
 			pool.totalTime = pool.totalTime + fitstate.frame
