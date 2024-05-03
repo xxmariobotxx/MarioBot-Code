@@ -64,3 +64,17 @@ level.txt - which level is being played
 realtime.txt - time elapsed in real time
 speciesdata.txt - data for current species with gsid, smax, stale, and nick
 turbo.txt - the current set turbo range
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+FILE:RECORD.PY
+
+I have included a functionality in this program to record (in OBS) when Mario beats a level. On completion, the program will toggle the recording button in OBS and will again toggle the recording button again when transitioning to the next level. I've included comments on what packages and plugins are needed for it to work within the program itself, and I will include it here.
+
+Packages: Run this command to install the necessary package
+pip install websockets
+
+Use this plugin for OBS:
+https://github.com/obsproject/obs-websocket/releases
+
+Once installed (re)start OBS go to Tools > Websocket server settings > Show Connect Info. Take the password that is shown here, genereate one otherwise, and plug in the password in 'record.py' where it says 'your_password_here'
