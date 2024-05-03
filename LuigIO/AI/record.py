@@ -7,6 +7,9 @@ import base64
 '''
 Run this command to get necessary library
 pip install websockets
+
+Find the OBS plugin here:
+https://github.com/obsproject/obs-websocket/releases
 '''
 async def toggle_recording():
     uri = "ws://localhost:4444"  # Adjust the port if different
