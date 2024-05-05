@@ -278,6 +278,7 @@ function initPool() --The pool contains all data for the genetics of the AI
 	pool.history = "" --breakthrough tracker
 	pool.breakthroughX = 0 --indicator stuff
 	pool.breakthroughZ = ""
+	pool.breakthroughfiles = {}
 end
 
 function newSpecies() --Each species is a group of genomes that are similar
@@ -1386,7 +1387,8 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				TurboMin = 0
 				TurboMax = 0
 				turboOutput()
-				playGenome(genome)
+				replayBreakthroughs()
+				--playGenome(genome)
 			end
 			return true
 		end
@@ -1552,6 +1554,9 @@ function writeBreakthroughOutput()
 
     -- Call the indicatorOutput function
     indicatorOutput()
+end
+
+function replayBreakthroughs()
 end
 
 function levelNameOutput()
