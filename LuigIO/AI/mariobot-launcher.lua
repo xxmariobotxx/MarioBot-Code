@@ -57,9 +57,9 @@ function run(filename)
 	end
 end
 
-luigiofilename = "LuigIO-V4.lua"
+mariobotfilename = "MarioBot-V1.lua"
 while true do
-	success,err = run(luigiofilename)
+	success,err = run(mariobotfilename)
 	if success then
 		break
 	end
@@ -72,7 +72,7 @@ while true do
 			if interruptclear then interruptclear:close() end
 			pcall(interrupt)
 			if restartprog then
-				luigiofilename = restartprog
+				mariobotfilename = restartprog
 				break
 			end
 		end
