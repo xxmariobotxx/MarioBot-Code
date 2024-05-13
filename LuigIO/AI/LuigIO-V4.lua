@@ -63,7 +63,7 @@ FramesOfDeathAnimation = 50 --amount of the death animation to show
 FPS = 50+10*LostLevels
 
 TurboMin = 0
-TurboMax = 1
+TurboMax = 0
 CompleteAutoTurbo = false
 currentTurbo = false
 
@@ -278,6 +278,7 @@ function initPool() --The pool contains all data for the genetics of the AI
 	pool.history = "" --breakthrough tracker
 	pool.breakthroughX = 0 --indicator stuff
 	pool.breakthroughZ = ""
+	pool.breakthroughfiles = {}
 end
 
 function newSpecies() --Each species is a group of genomes that are similar
@@ -998,19 +999,22 @@ function writetable(file,tbl) --writes a string of a table to a file
 	tablestring(tbl)
 end
 
-function saveGenome() --saves a species containing the winning genome to a file
-	local levelname = currentWorld.."-"..currentLevel --name of level in the file name
-	if LostLevels == 1 then levelname = "LL"..currentWorld.."-"..currentLevel end
-	local file = io.open("backups"..dirsep..levelname.."_winner.lua","w")
-	spec = pool.species[pool.currentSpecies]
-	genome = spec.genomes[pool.currentGenome]
-	genome.nick = spec.nick
-	file:write("loadedgenome=")
-	writetable(file,genome)
-	file:close()
-	file = io.open("backups"..dirsep.."winners.txt","w")
-	file:write("backups"..dirsep..levelname.."_winner.lua\n")
-	file:close()
+function saveGenome(name)
+  local levelname = currentWorld .. "-" .. currentLevel  -- Name of level in the file name
+  if LostLevels == 1 then levelname = "LL" .. currentWorld .. "-" .. currentLevel end
+  local filename = "backups" .. dirsep .. levelname .. dirsep .. name .. ".lua"
+  local file = io.open(filename, "w")
+  local spec = pool.species[pool.currentSpecies]
+  local genome = spec.genomes[pool.currentGenome]
+  genome.nick = spec.nick
+  genome.gen = pool.generation
+  genome.s = pool.currentSpecies
+  genome.g = pool.currentGenome
+  file:write("loadedgenome=")
+  writetable(file, genome)
+  file:close()
+  table.insert(pool.breakthroughfiles, filename)  -- Add filename to breakthroughfiles
+  print("Saved breakthrough genome to: " .. filename)
 end
 
 function savePool(filename) --saves the pool into a file
@@ -1376,6 +1380,8 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			return false
 		end
 		if prelevel == 1 then --if he beats the level
+			initializeBackupDirectory()
+			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
 			--os.execute("python3 record.py") --Uncomment this line if you want to use this to record the winning genome in OBS
 			genome.networks = {} --reset networks to save on RAM
 			pool.attempts = pool.attempts + 1
@@ -1386,7 +1392,17 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				TurboMin = 0
 				TurboMax = 0
 				turboOutput()
-				playGenome(genome)
+      			Replay = true
+      			for i = 1, #pool.breakthroughfiles do
+      			  print("Replaying breakthrough: " .. pool.breakthroughfiles[i])
+      			  dofile(pool.breakthroughfiles[i]) -- Load the breakthrough genome
+      			  pool.generation = loadedgenome.gen
+      			  pool.currentSpecies = loadedgenome.s
+      			  pool.currentGenome = loadedgenome.g
+      			  playGenome(loadedgenome) -- Replay the loaded genome
+      			end
+      			Replay = false
+      			pool.breakthroughfiles = {} --Reset
 			end
 			return true
 		end
@@ -1424,6 +1440,7 @@ function playSpecies(species,showBest) --Plays through all members of a species
 			pool.bestSpecies = species.gsid --update the best species number
 			pool.maxFitness = genome.fitstate.fitness --update the best fitness
 			writeBreakthroughOutput()
+			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
 		elseif genome.fitstate.fitness > pool.secondFitness then --if the fitness is the new second best
 			if species.gsid ~= pool.bestSpecies then --change the second best if this is not the current best species
 				pool.secondFitness = genome.fitstate.fitness
@@ -2031,7 +2048,6 @@ while true do
 		newGeneration()
 		redospectop = false
 	end
-	saveGenome()
 	savestateSlot=savestateSlot+1
 	if savestateSlot==10 then savestateSlot=1 end
 	savestateObj = savestate.object(savestateSlot)
