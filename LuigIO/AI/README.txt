@@ -1,4 +1,4 @@
-LuigI/O b4.1
+Mariobot
 
 An AI to play Super Mario Bros and Lost Levels
 
@@ -7,7 +7,7 @@ To run, first set up a savestate in slot 1 (or in any other slot, the used slot 
 Make sure to set LostLevels to 1 if playing lost levels, and 0 otherwise.
 Set Player to 2 if playing as Luigi in SMB1, and 1 otherwise.
 
-Open the Lua script "luigio-launcher.lua" to start.
+Open the Lua script "mariobot-launcher.lua" to start.
 
 Buttons:
 A - activates the generation stats bar at the top
@@ -77,4 +77,4 @@ pip install websockets
 Use this plugin for OBS:
 https://github.com/obsproject/obs-websocket/releases
 
-Once installed (re)start OBS go to Tools > Websocket server settings > Show Connect Info. Take the password that is shown here, genereate one otherwise, and plug in the password in 'record.py' where it says 'your_password_here'
+Once installed (re)start OBS go to Tools > Websocket server settings > Show Connect Info. Take the password that is shown here, genereate one otherwise, and plug in the password that was generated/created in 'record.py' where it says 'your_password_here'
