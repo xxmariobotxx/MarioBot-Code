@@ -63,7 +63,7 @@ FramesOfDeathAnimation = 50 --amount of the death animation to show
 FPS = 50+10*LostLevels
 
 TurboMin = 0
-TurboMax = 475
+TurboMax = 0
 CompleteAutoTurbo = false
 currentTurbo = false
 
