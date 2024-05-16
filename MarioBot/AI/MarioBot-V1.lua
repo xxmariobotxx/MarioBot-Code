@@ -1217,11 +1217,6 @@ Ranges = { --special ranges in which there is a fitness function modification
 		{xrange={min=1132},yrange={max=16},coeffs={x=0,y=0,c=0}}}
 } --Currently missing Lost Levels World 8
 
-function isWaterLevel()
-	local areaType = memory.readbyte(0x074E)
-	return areaType == 0
-end
-
 function fitness(fitstate) --Returns the distance into the level - the non-time component of fitness
 	local coeffs={x=1,y=1,c=0} --position base coefficients
 	local marioX = marioX
@@ -1239,9 +1234,6 @@ function fitness(fitstate) --Returns the distance into the level - the non-time 
 				end
 			end
 		end
-	end
-	if isWaterLevel()
-		coeffs.y = 0 --Prevent Mario from getting stuck at the top of water levels
 	end
 	fitstate.position = coeffs.x*marioX + coeffs.y*(192 - marioY) + coeffs.c --set the position value
 	if mazeCPGoal > mazeCP then --missed a maze checkpoint
