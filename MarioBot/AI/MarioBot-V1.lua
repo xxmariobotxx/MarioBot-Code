@@ -4,7 +4,7 @@ Player = 1
 savestateSlot = 1
 savestateObj = savestate.object(savestateSlot)
 
-BoxRadius = 6 --The radius of the vision box around Luigi
+BoxRadius = 6 --The radius of the vision box around Mario
 InitialOscillations = {50,60,90} --Initial set of oscillation timers
 BoxWidth = BoxRadius*2+1 --Full width of the box
 BoxSize = BoxWidth*BoxWidth --Number of neurons in the box
@@ -35,9 +35,9 @@ DeltaSwitch = 0.6 --threshold for delta of the network switch location
 DisplaySlots = false --Display the sprite slots?
 DisplaySprites = false --Display the sprite hitboxes?
 DisplayGrid = 0 --Display a large network inputs grid?
-DisplayNetwork = false --Display the neural network state?
-DisplayStats = false --Display top stats bar?
-DisplayRanges = false --Display special fitness ranges?
+DisplayNetwork = true --Display the neural network state?
+DisplayStats = true --Display top stats bar?
+DisplayRanges = true --Display special fitness ranges?
 DisplayCounters = false --Display death/time counter?
 
 ManualInput = false --Input manually rather than by network?
@@ -1303,6 +1303,8 @@ function playGenome(genome) --Run a genome through an attempt at the level
 	local nsw = 1 --network switch
 	generateNetwork(genome) --generate the network
 	local controller = {} --inputs to the controller
+
+	levelCompleted = false
 	
 	while true do --main game loop
 		local manualControl = keyboardInput()
@@ -1379,9 +1381,19 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			pool.totalTime = pool.totalTime + fitstate.frame
 			return false
 		end
+		if memory.readbyte(0x07F8) == 0 and memory.readbyte(0x07F9) == 0 and memory.readbyte(0x07FA) == 0 and not levelCompleted then
+
+			levelCompleted = true
+
+			if not Replay then
+				print("Beat level")
+				writeBreakthroughOutput()
+				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
+			end
+		end
+				
 		if prelevel == 1 then --if he beats the level
-			initializeBackupDirectory()
-			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
+			levelCompleted = false
 			--os.execute("python3 record.py") --Uncomment this line if you want to use this to record the winning genome in OBS
 			genome.networks = {} --reset networks to save on RAM
 			pool.attempts = pool.attempts + 1
@@ -1440,7 +1452,9 @@ function playSpecies(species,showBest) --Plays through all members of a species
 			pool.bestSpecies = species.gsid --update the best species number
 			pool.maxFitness = genome.fitstate.fitness --update the best fitness
 			writeBreakthroughOutput()
-			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
+			if memory.readbyte(0x07F8) ~= 0 or memory.readbyte(0x07F9) ~= 0 or memory.readbyte(0x07FA) ~= 0 then
+				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
+			end
 		elseif genome.fitstate.fitness > pool.secondFitness then --if the fitness is the new second best
 			if species.gsid ~= pool.bestSpecies then --change the second best if this is not the current best species
 				pool.secondFitness = genome.fitstate.fitness
@@ -1684,7 +1698,7 @@ function keyboardInput()
 	if keyboard['L'] and keyFlag == false then --L loads
 		--to load put an interrupt that will restart the program and initialize with the previous pool
 		local interrupt = io.open("interrupt.lua","w")
-		interrupt:write("restartprog = luigiofilename")
+		interrupt:write("restartprog = mariobotfilename")
 		interrupt:close()
 		local initialize = io.open("initialize.lua","w")
 		initialize:write("loadPool('backups/current.lua')")
