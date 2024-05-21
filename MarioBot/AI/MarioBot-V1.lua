@@ -1388,8 +1388,15 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			if not Replay then
 				print("Beat level")
 				writeBreakthroughOutput()
-				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
+				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome.."_winner")
 			end
+		end
+
+		if fitstate.area == "Level" and marioState == 8 and memory.readbyte(0x001D) == 0 and timerCounter == 0 and not timerFrozenAtAxe then
+			timerFrozenAtAxe = true
+			print("Beat castle")
+			writeBreakthroughOutput()
+			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome.."_winner")
 		end
 				
 		if prelevel == 1 then --if he beats the level
@@ -1416,6 +1423,7 @@ function playGenome(genome) --Run a genome through an attempt at the level
       			Replay = false
       			pool.breakthroughfiles = {} --Reset
 			end
+			timerFrozenAtAxe = false
 			return true
 		end
 	end
@@ -1452,7 +1460,7 @@ function playSpecies(species,showBest) --Plays through all members of a species
 			pool.bestSpecies = species.gsid --update the best species number
 			pool.maxFitness = genome.fitstate.fitness --update the best fitness
 			writeBreakthroughOutput()
-			if memory.readbyte(0x07F8) ~= 0 or memory.readbyte(0x07F9) ~= 0 or memory.readbyte(0x07FA) ~= 0 then
+			if (memory.readbyte(0x07F8) ~= 0 or memory.readbyte(0x07F9) ~= 0 or memory.readbyte(0x07FA) ~= 0) and not (timerCounter == 0) then
 				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
 			end
 		elseif genome.fitstate.fitness > pool.secondFitness then --if the fitness is the new second best
