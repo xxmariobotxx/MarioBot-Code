@@ -1388,7 +1388,7 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			if not Replay then
 				print("Beat level")
 				writeBreakthroughOutput()
-				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome.."_winner")
+				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .."_Winner")
 			end
 		end
 
@@ -1396,7 +1396,7 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			timerFrozenAtAxe = true
 			print("Beat castle")
 			writeBreakthroughOutput()
-			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome.."_winner")
+			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .. "_CastleWinner")
 		end
 				
 		if prelevel == 1 then --if he beats the level
@@ -1420,7 +1420,6 @@ function playGenome(genome) --Run a genome through an attempt at the level
       			  pool.currentGenome = loadedgenome.g
       			  playGenome(loadedgenome) -- Replay the loaded genome
       			end
-      			Replay = false
       			pool.breakthroughfiles = {} --Reset
 			end
 			timerFrozenAtAxe = false
@@ -1554,11 +1553,14 @@ function writeBreakthroughOutput()
     local genome = species.genomes[pool.currentGenome]
 
     local gsid_base64 = toBase64(tostring(species.gsid)) --convert GSID numbers to a base64 number
+    local gsid_width = 5
 
-    -- Format the information
+    -- Better formatting of the information
     local fitness = math.floor(genome.fitstate.fitness)
-    local info = string.format("Gen:%d  Spec:%d  Gnm:%d  GSID:%s  Fit:%d  Time:",
-        pool.generation, pool.currentSpecies, pool.currentGenome, gsid_base64, fitness)
+    local info = string.format(
+        "%3d  %3d  %3d  %" .. gsid_width .. "s  %4d  ",
+        pool.generation, pool.currentSpecies, pool.currentGenome, gsid_base64, fitness
+    )
 
     -- Format and append the time information
     local seconds = pool.realTime
@@ -1582,6 +1584,7 @@ function writeBreakthroughOutput()
 
     -- Write the history to the file
     local fileFTracker = io.open("fitnesstracker.txt", "w")
+    fileFTracker:write("Gen  Spec  Gnm  GSID  Fit  Time\n") --Write headers first then write breakthrough information
     fileFTracker:write(pool.history)
     fileFTracker:close()
 
@@ -2076,6 +2079,11 @@ while true do
 	savestate.save(savestateObj)
 	initLevel()
 	initializeBackupDirectory()
+	if Replay and #pool.breakthroughfiles == 0 then
+		TurboMax = 1
+		turboOutput()
+		Replay = false
+	end
 end
 
 return true
