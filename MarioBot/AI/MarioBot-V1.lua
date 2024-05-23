@@ -112,6 +112,8 @@ function getPositions() --Returns all needed game state information from the gam
 	mazeCPGoal = memory.readbyte(0x06DA) --number of checkpoints it should have passed
 	
 	timerCounter = memory.readbyte(0x0787) --counter uesd for the timer. if stays at 0 means timer is frozen
+
+	areaType = memory.readbyte(0x074E)
 	
 	screenX = memory.readbyte(0x03AD) --X of current screen
 	screenY = memory.readbyte(0x03B8) --Y of current screen
@@ -1234,6 +1236,9 @@ function fitness(fitstate) --Returns the distance into the level - the non-time 
 				end
 			end
 		end
+	end
+	if areaType == 0 then
+		coeffs.y = 0
 	end
 	fitstate.position = coeffs.x*marioX + coeffs.y*(192 - marioY) + coeffs.c --set the position value
 	if mazeCPGoal > mazeCP then --missed a maze checkpoint
