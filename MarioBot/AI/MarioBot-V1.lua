@@ -2018,6 +2018,21 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 		gui.drawtext(5,220,"Deaths: "..pool.deaths,-1)
 		gui.drawtext(5,230,"Attempts: "..pool.attempts,-1)
 	end
+	if Replay then
+		local text = "Replaying Breakthroughs"
+		local textColor = toRGBA(0xFFFFFFFF)
+		local backgroundColor = toRGBA(0xFF003FFF)
+		local charWidth = 8
+		local textWidth = charWidth * string.len(text)
+		local textHeight = 10
+
+		local textX = (256 - textWidth) / 2
+		local textY = 220
+		
+		gui.drawbox(textX - 4, textY - 4, textX + textWidth + 4, textY + textHeight + 4, backgroundColor, backgroundColor)
+
+		drawtext.draw(text, textX, textY, textColor, 0x0)
+	end
 end
 
 function initializeBackupDirectory()
@@ -2079,10 +2094,11 @@ while true do
 	savestate.save(savestateObj)
 	initLevel()
 	initializeBackupDirectory()
-	if Replay and #pool.breakthroughfiles == 0 then
+	if Replay and #pool.breakthroughfiles == 0 then --This is useful for getting through the generations where Mario does a lot of standing around
 		TurboMax = 1
 		turboOutput()
 		Replay = false
+		print("TurboMax set to "..TurboMax)
 	end
 end
 
