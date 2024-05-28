@@ -1560,12 +1560,10 @@ function writeBreakthroughOutput()
     local gsid_base64 = toBase64(tostring(species.gsid)) --convert GSID numbers to a base64 number
     local gsid_width = 5
 
-    -- Better formatting of the information
+    -- Format the information
     local fitness = math.floor(genome.fitstate.fitness)
-    local info = string.format(
-        "%3d  %3d  %3d  %" .. gsid_width .. "s  %4d  ",
-        pool.generation, pool.currentSpecies, pool.currentGenome, gsid_base64, fitness
-    )
+    local info = string.format("Gen:%d Spec:%d Gnm:%d GSID:%s Fit:%d Time:",
+    	pool.generation, pool.currentSpecies, pool.currentGenome, gsid_base64, fitness)
 
     -- Format and append the time information
     local seconds = pool.realTime
@@ -1589,7 +1587,6 @@ function writeBreakthroughOutput()
 
     -- Write the history to the file
     local fileFTracker = io.open("fitnesstracker.txt", "w")
-    fileFTracker:write("Gen  Spec  Gnm  GSID  Fit  Time\n") --Write headers first then write breakthrough information
     fileFTracker:write(pool.history)
     fileFTracker:close()
 
