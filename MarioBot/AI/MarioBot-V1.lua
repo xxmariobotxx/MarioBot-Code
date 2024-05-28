@@ -1390,6 +1390,10 @@ function playGenome(genome) --Run a genome through an attempt at the level
 
 			levelCompleted = true
 
+			if genome.fitstate.fitness > pool.maxFitness then
+				pool.maxFitness = genome.fitstate.fitness
+			end
+
 			if not Replay then
 				print("Beat level")
 				writeBreakthroughOutput()
@@ -1398,7 +1402,13 @@ function playGenome(genome) --Run a genome through an attempt at the level
 		end
 
 		if fitstate.area == "Level" and marioState == 8 and memory.readbyte(0x001D) == 0 and timerCounter == 0 and not timerFrozenAtAxe then
+			
 			timerFrozenAtAxe = true
+
+			if genome.fitstate.fitness > pool.maxFitness then
+				pool.maxFitness = genome.fitstate.fitness
+			end
+			
 			print("Beat castle")
 			writeBreakthroughOutput()
 			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .. "_CastleWinner")
