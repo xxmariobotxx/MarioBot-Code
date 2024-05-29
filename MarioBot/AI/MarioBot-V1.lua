@@ -31,6 +31,7 @@ DeltaDisjoint = 4.0 --multiplier for disjoint in same species function
 DeltaWeights = 0.4 --multiplier for weights in same species function
 DeltaThreshold = 1.0 --threshold for delta to be in the same species
 DeltaSwitch = 0.6 --threshold for delta of the network switch location
+turboUpdatedForNetwork = {} --table to store what networks have had TurboMax adjusted to
 
 DisplaySlots = false --Display the sprite slots?
 DisplaySprites = false --Display the sprite hitboxes?
@@ -1310,6 +1311,7 @@ function playGenome(genome) --Run a genome through an attempt at the level
 	local controller = {} --inputs to the controller
 
 	levelCompleted = false
+	timerFrozenAtAxe = false
 	
 	while true do --main game loop
 		local manualControl = keyboardInput()
@@ -1327,6 +1329,10 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			for n=1,#genome.networkswitch do
 				if nscompare > genome.networkswitch[n] then
 					nsw = n+1
+					if not Replay and not turboUpdatedForNetwork[nsw] then
+						TurboMax = fitstate.fitness
+						turboUpdatedForNetwork[nsw] = true
+					end
 				end
 			end
 			--Put outputs to the controller
@@ -1402,16 +1408,17 @@ function playGenome(genome) --Run a genome through an attempt at the level
 		end
 
 		if fitstate.area == "Level" and marioState == 8 and memory.readbyte(0x001D) == 0 and timerCounter == 0 and not timerFrozenAtAxe then
-			
 			timerFrozenAtAxe = true
-
+			
 			if genome.fitstate.fitness > pool.maxFitness then
 				pool.maxFitness = genome.fitstate.fitness
 			end
 			
-			print("Beat castle")
-			writeBreakthroughOutput()
-			saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .. "_CastleWinner")
+			if not Replay then
+				print("Beat castle")
+				writeBreakthroughOutput()
+				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .. "_CastleWinner")
+			end
 		end
 				
 		if prelevel == 1 then --if he beats the level
@@ -1435,7 +1442,8 @@ function playGenome(genome) --Run a genome through an attempt at the level
       			  pool.currentGenome = loadedgenome.g
       			  playGenome(loadedgenome) -- Replay the loaded genome
       			end
-      			pool.breakthroughfiles = {} --Reset
+      			pool.breakthroughfiles = {} --Reset table for breakthroughs in the next level
+      			turboUpdatedForNetwork = {} --Reset table for next level for network switches & turbo updates
 			end
 			timerFrozenAtAxe = false
 			return true
@@ -2031,14 +2039,14 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 		gui.drawtext(5,230,"Attempts: "..pool.attempts,-1)
 	end
 	if Replay then
-		local text = "Replaying Breakthroughs"
+		local text = "Replay"
 		local textColor = toRGBA(0xFFFFFFFF)
 		local backgroundColor = toRGBA(0xFF003FFF)
 		local charWidth = 8
 		local textWidth = charWidth * string.len(text)
 		local textHeight = 10
 
-		local textX = (256 - textWidth) / 2
+		local textX = (256 - textWidth) / 2 + 95
 		local textY = 220
 		
 		gui.drawbox(textX - 4, textY - 4, textX + textWidth + 4, textY + textHeight + 4, backgroundColor, backgroundColor)
