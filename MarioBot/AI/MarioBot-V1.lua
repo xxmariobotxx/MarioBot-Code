@@ -11,9 +11,9 @@ BoxSize = BoxWidth*BoxWidth --Number of neurons in the box
 Inputs = BoxSize + 3 + #InitialOscillations
 
 --MarioBot's global variables go here
-particles = {}
-sparksPending = false
-maxFitnessPerArea = {}
+particles = {} --Little particles for fireworks when Mario makes a new max fitness
+sparksPending = false --This is used when waiting for turbo to return to normal speed for celebration when Mario makes a new max fitness
+maxFitnessPerArea = {} --A dictionary to store max fitness, X, and Y for each area.
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -1272,9 +1272,9 @@ function fitness(fitstate) --Returns the distance into the level - the non-time 
 		end
 	end
     if maxFitnessPerArea[fitstate.area] == nil then
-        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX}
+        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX, y = marioY}
     elseif fitstate.fitness > maxFitnessPerArea[fitstate.area].fitness then
-        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX}
+        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX, y = marioY}
     end
 	fitstate.hitblocks = hitblocks --transfer global hitblocks to local fitstate
 	fitstate.laststate = marioState --set laststate
@@ -2097,9 +2097,10 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 		if maxFitnessPerArea[fitstate.area] ~= nil then
 			local areaMaxFitness = maxFitnessPerArea[fitstate.area].fitness
 			local areaMaxFitnessX = maxFitnessPerArea[fitstate.area].x
+			local areaMaxFitnessY = maxFitnessPerArea[fitstate.area].y
 			if areaMaxFitness ~= nil and areaMaxFitnessX ~= nil and fitstate.area == "Level" then
 				local flagX = areaMaxFitnessX - marioX + marioScreenX
-				local flagY = 192
+				local flagY = areaMaxFitnessY - marioY + marioScreenY 
 
 				gui.drawbox(flagX + 9, flagY, flagX + 17, flagY + 6, toRGBA(0xFFFF0000), toRGBA(0xFFFF0000))
 				gui.drawbox(flagX + 7, flagY, flagX + 8, flagY + 16, toRGBA(0xFFFFFFFF), toRGBA(0xFFFFFFFF))
