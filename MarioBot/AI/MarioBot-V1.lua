@@ -10,6 +10,11 @@ BoxWidth = BoxRadius*2+1 --Full width of the box
 BoxSize = BoxWidth*BoxWidth --Number of neurons in the box
 Inputs = BoxSize + 3 + #InitialOscillations
 
+--MarioBot's global variables go here
+particles = {}
+sparksPending = false
+maxFitnessPerArea = {}
+
 InitialMutationRates = {
 	linkInputBox=0.1,
 	linkBottomRow=0.05,
@@ -64,7 +69,7 @@ FramesOfDeathAnimation = 50 --amount of the death animation to show
 FPS = 50+10*LostLevels
 
 TurboMin = 0
-TurboMax = 0
+TurboMax = 1
 CompleteAutoTurbo = false
 currentTurbo = false
 
@@ -1266,6 +1271,11 @@ function fitness(fitstate) --Returns the distance into the level - the non-time 
 			end
 		end
 	end
+    if maxFitnessPerArea[fitstate.area] == nil then
+        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX}
+    elseif fitstate.fitness > maxFitnessPerArea[fitstate.area].fitness then
+        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX}
+    end
 	fitstate.hitblocks = hitblocks --transfer global hitblocks to local fitstate
 	fitstate.laststate = marioState --set laststate
 	local secretScore = (hitblocks*LostLevels+mazeCP)*50 --score for finding secret routes like hidden blocks and maze paths
@@ -1359,6 +1369,10 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			if currentTurbo then
 				currentTurbo = false
 				emu.speedmode("normal")
+				if sparksPending then
+					spawnParticles()
+					sparksPending = false
+				end
 			end
 		end
 		
@@ -1451,6 +1465,67 @@ function playGenome(genome) --Run a genome through an attempt at the level
 	end
 end
 
+function spawnParticles()
+    local numParticles = 20 -- Adjust as needed
+    local angleIncrement = (2 * math.pi) / numParticles -- Evenly distribute angles
+
+    for i = 1, numParticles do
+        local hue = math.random()
+        local saturation = 1
+        local lightness = 0.5
+        local alpha = 1
+
+        local r, g, b, a = hslToRgb(hue, saturation, lightness, alpha)
+
+        local angle = angleIncrement * i -- Calculate angle for each particle
+        local radius = math.random(10, 50) -- Randomize radius for a burst effect
+
+        local particle = {
+            x = 128 + radius * math.cos(angle), -- Position based on angle and radius
+            y = 128 + radius * math.sin(angle), -- CORRECTED: Centered vertically at 128
+            vx = math.random(-3, 3),
+            vy = math.random(-5, -1),
+            life = math.random(120, 180),
+            gravity = 0.2,
+            color = toRGBA(math.floor(a * 255) * 0x1000000 + math.floor(r * 255) * 0x10000 + math.floor(g * 255) * 0x100 + math.floor(b * 255))
+        }
+        table.insert(particles, particle)
+
+        gui.drawbox(particle.x, particle.y, particle.x + 3, particle.y + 3, particle.color, particle.color)
+    end
+end
+
+function hslToRgb(h, s, l, a)
+	if s<=0 then return l,l,l,a end
+	h, s, l = h*6, s, l
+	local c = (1-math.abs(2*l-1))*s
+	local x = (1-math.abs(h%2-1))*c
+	local m,r,g,b = (l-.5*c), 0,0,0
+	if h < 1     then r,g,b = c,x,0
+	elseif h < 2 then r,g,b = x,c,0
+	elseif h < 3 then r,g,b = 0,c,x
+	elseif h < 4 then r,g,b = 0,x,c
+	elseif h < 5 then r,g,b = x,0,c
+	else              r,g,b = c,0,x
+	end return r+m, g+m, b+m, a
+end
+
+function updateParticles()
+    for i = #particles, 1, -1 do
+        local p = particles[i]
+        p.x = p.x + p.vx
+        p.y = p.y + p.vy
+        p.vy = p.vy + p.gravity -- Apply gravity to vertical velocity
+        p.life = p.life - 1
+        if p.life <= 0 then 
+            table.remove(particles, i) 
+        else
+            local alpha = math.floor((p.life / 120) * 255) -- Fade out over time
+            gui.drawbox(p.x, p.y, p.x + 3, p.y + 3, p.color + (alpha * 0x1000000), p.color + (alpha * 0x1000000))
+        end
+    end
+end
+
 function playSpecies(species,showBest) --Plays through all members of a species
 	spindicatorOutput(species)
 	local startGenome = 2 --which genome to start showing from
@@ -1481,6 +1556,8 @@ function playSpecies(species,showBest) --Plays through all members of a species
 			end
 			pool.bestSpecies = species.gsid --update the best species number
 			pool.maxFitness = genome.fitstate.fitness --update the best fitness
+			pool.maxFitnessX = marioX --store the x-coordinate
+			sparksPending = true
 			writeBreakthroughOutput()
 			if (memory.readbyte(0x07F8) ~= 0 or memory.readbyte(0x07F9) ~= 0 or memory.readbyte(0x07FA) ~= 0) and not (timerCounter == 0) then
 				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome)
@@ -1761,6 +1838,7 @@ function keyboardInput()
 end
 
 function displayGUI(network, fitstate) --Displays various toggleable components of the GUI
+	updateParticles()
 	if DisplayGrid > 0 then --Display a large input grid around Mario's actual position
 		--Loop through each position
 		for x=-BoxRadius,BoxRadius do
@@ -2016,6 +2094,17 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 		end
 	end
 	if DisplayStats then
+		if maxFitnessPerArea[fitstate.area] ~= nil then
+			local areaMaxFitness = maxFitnessPerArea[fitstate.area].fitness
+			local areaMaxFitnessX = maxFitnessPerArea[fitstate.area].x
+			if areaMaxFitness ~= nil and areaMaxFitnessX ~= nil and fitstate.area == "Level" then
+				local flagX = areaMaxFitnessX - marioX + marioScreenX
+				local flagY = 192
+
+				gui.drawbox(flagX + 9, flagY, flagX + 17, flagY + 6, toRGBA(0xFFFF0000), toRGBA(0xFFFF0000))
+				gui.drawbox(flagX + 7, flagY, flagX + 8, flagY + 16, toRGBA(0xFFFFFFFF), toRGBA(0xFFFFFFFF))
+			end
+		end
 		local completed = pool.currentGenome
 		local total = 0
 		for s=1,#pool.species do
