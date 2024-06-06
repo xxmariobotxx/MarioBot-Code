@@ -13,6 +13,7 @@ Inputs = BoxSize + 3 + #InitialOscillations
 --MarioBot's global variables go here
 particles = {}
 sparksPending = false
+maxFitnessPerArea = {}
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -1270,6 +1271,11 @@ function fitness(fitstate) --Returns the distance into the level - the non-time 
 			end
 		end
 	end
+    if maxFitnessPerArea[fitstate.area] == nil then
+        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX}
+    elseif fitstate.fitness > maxFitnessPerArea[fitstate.area].fitness then
+        maxFitnessPerArea[fitstate.area] = {fitness = fitstate.fitness, x = marioX}
+    end
 	fitstate.hitblocks = hitblocks --transfer global hitblocks to local fitstate
 	fitstate.laststate = marioState --set laststate
 	local secretScore = (hitblocks*LostLevels+mazeCP)*50 --score for finding secret routes like hidden blocks and maze paths
@@ -2088,9 +2094,16 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 		end
 	end
 	if DisplayStats then
-		if pool.maxFitnessX ~= nil then
-			local lineX = pool.maxFitnessX - marioX + marioScreenX
-			gui.drawline(lineX, 0, lineX, 224, toRGBA(0xFFFF0000))
+		if maxFitnessPerArea[fitstate.area] ~= nil then
+			local areaMaxFitness = maxFitnessPerArea[fitstate.area].fitness
+			local areaMaxFitnessX = maxFitnessPerArea[fitstate.area].x
+			if areaMaxFitness ~= nil and areaMaxFitnessX ~= nil and fitstate.area == "Level" then
+				local flagX = areaMaxFitnessX - marioX + marioScreenX
+				local flagY = 192
+
+				gui.drawbox(flagX + 9, flagY, flagX + 17, flagY + 6, toRGBA(0xFFFF0000), toRGBA(0xFFFF0000))
+				gui.drawbox(flagX + 7, flagY, flagX + 8, flagY + 16, toRGBA(0xFFFFFFFF), toRGBA(0xFFFFFFFF))
+			end
 		end
 		local completed = pool.currentGenome
 		local total = 0
