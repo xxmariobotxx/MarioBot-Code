@@ -1008,21 +1008,21 @@ function writetable(file,tbl) --writes a string of a table to a file
 end
 
 function saveGenome(name)
-  local levelname = currentWorld .. "-" .. currentLevel  -- Name of level in the file name
-  if LostLevels == 1 then levelname = "LL" .. currentWorld .. "-" .. currentLevel end
-  local filename = "backups" .. dirsep .. levelname .. dirsep .. name .. ".lua"
-  local file = io.open(filename, "w")
-  local spec = pool.species[pool.currentSpecies]
-  local genome = spec.genomes[pool.currentGenome]
-  genome.nick = spec.nick
-  genome.gen = pool.generation
-  genome.s = pool.currentSpecies
-  genome.g = pool.currentGenome
-  file:write("loadedgenome=")
-  writetable(file, genome)
-  file:close()
-  table.insert(pool.breakthroughfiles, filename)  -- Add filename to breakthroughfiles
-  print("Saved breakthrough genome to: " .. filename)
+	local levelname = currentWorld .. "-" .. currentLevel  -- Name of level in the file name
+	if LostLevels == 1 then levelname = "LL" .. currentWorld .. "-" .. currentLevel end
+	local filename = "backups" .. dirsep .. levelname .. dirsep .. name .. ".lua"
+	local file = io.open(filename, "w")
+	local spec = pool.species[pool.currentSpecies]
+	local genome = spec.genomes[pool.currentGenome]
+	genome.nick = spec.nick
+	genome.gen = pool.generation
+	genome.s = pool.currentSpecies
+	genome.g = pool.currentGenome
+	file:write("loadedgenome=")
+	writetable(file, genome)
+	file:close()
+	table.insert(pool.breakthroughfiles, filename)  -- Add filename to breakthroughfiles
+	print("Saved breakthrough genome to: " .. filename)
 end
 
 function savePool(filename) --saves the pool into a file
@@ -1384,8 +1384,10 @@ function playGenome(genome) --Run a genome through an attempt at the level
 		
 		--exit if dead or won
 		if marioState == 11 or marioY > 256 then --if he dies to an enemy or a pit
-			pool.attempts = pool.attempts + 1
-			pool.deaths = pool.deaths + 1
+			if not Replay then
+				pool.attempts = pool.attempts + 1
+				pool.deaths = pool.deaths + 1
+			end
 			deathCounterOutput()
 			for frame=1,FramesOfDeathAnimation do
 				displayGUI(genome.networks[nsw], fitstate)
@@ -1399,14 +1401,16 @@ function playGenome(genome) --Run a genome through an attempt at the level
 		end
 		if fitstate.timeout > fitstate.rightmost/3+120 and not ManualInput and timerCounter > 0 then --timeout threshold increases throughout level. kill if timeout is enabled and timer is not frozen
 			genome.networks = {} --reset networks to save on RAM
-			pool.attempts = pool.attempts + 1
+			if not Replay then
+				pool.attempts = pool.attempts + 1
+			end
 			deathCounterOutput()
 			turboOutput()
 			timerOutput()
 			pool.totalTime = pool.totalTime + fitstate.frame
 			return false
 		end
-		if memory.readbyte(0x07F8) == 0 and memory.readbyte(0x07F9) == 0 and memory.readbyte(0x07FA) == 0 and not levelCompleted then
+		if memory.readbyte(0x07F8) == 0 and memory.readbyte(0x07F9) == 0 and memory.readbyte(0x07FA) == 0 and not levelCompleted and timerCounter == 0 then --If all digits in timer equal zero and the timer is frozen, Mario beat the level
 
 			levelCompleted = true
 
@@ -1418,6 +1422,16 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				print("Beat level")
 				writeBreakthroughOutput()
 				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .."_Winner")
+			end
+
+			local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
+			if winnersFile then
+				local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
+				winnersFile:write(winnerFilename.."\n")
+				winnersFile:close()
+				print("Updated winners.txt with latest winner.")
+			else
+				print("Error opening winners.txt for writing.")
 			end
 		end
 
@@ -1432,6 +1446,16 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				print("Beat castle")
 				writeBreakthroughOutput()
 				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .. "_CastleWinner")
+			end
+
+			local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
+			if winnersFile then
+				local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
+				winnersFile:write(winnerFilename.."\n")
+				winnersFile:close()
+				print("Updated winners.txt with latest winner.")
+			else
+				print("Error opening winners.txt for writing.")
 			end
 		end
 				
@@ -1657,7 +1681,7 @@ function writeBreakthroughOutput()
 
     -- Format the information
     local fitness = math.floor(genome.fitstate.fitness)
-    local info = string.format("Gen:%d Spec:%d Gnm:%d GSID:%s Fit:%d Time:",
+    info = string.format("%-4d %-5d %-4d %-5s %-4d ",
     	pool.generation, pool.currentSpecies, pool.currentGenome, gsid_base64, fitness)
 
     -- Format and append the time information
