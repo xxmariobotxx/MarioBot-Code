@@ -1036,6 +1036,22 @@ function loadPool(filename) --loads the pool from a file
 	ProgramStartTime = ProgramStartTime - pool.realTime
 end
 
+function writeALLGSIDs()
+	local fileGSIDs = io.open("Chatbot"..dirsep.."allGSIDs.txt", "w")
+
+	if fileGSIDs then
+		for s = 1, #pool.species do
+			local species = pool.species[s]
+			local gsid_base64 = toBase64(tostring(species.gsid))
+			fileGSIDs:write(gsid_base64.."\n")
+		end
+
+		fileGSIDs:close()
+	else
+		print("Error opening allGSIDs.txt for writing")
+	end
+end
+
 function newGeneration() --runs the evolutionary algorithms to advance a generation
 	maxNewGenProgress = -1
 	newgenProgress(0)
@@ -1182,6 +1198,8 @@ function newGeneration() --runs the evolutionary algorithms to advance a generat
 	pool.bottleneck = pool.bottleneck + 1
 	newgenProgress(19)
 	savePool("backups/current.lua")
+	writeALLGSIDs()
+	applyNicknames()
 	newgenProgress(20)
 end
 
@@ -1608,6 +1626,28 @@ function playSpecies(species,showBest) --Plays through all members of a species
 	return false --return false otherwise
 end
 
+function applyNicknames()
+    -- Check if nicknames.txt exists
+    local file = io.open("Chatbot" .. dirsep .. "nicknames.txt", "r")
+    if file then
+        for line in file:lines() do
+            local gsid, nick = line:match("(%d+),(.*)")
+            gsid = tonumber(gsid)
+            for s = 1, #pool.species do
+                local species = pool.species[s]
+                if species.gsid == gsid then
+                    species.nick = nick
+                    print("Species " .. gsid .. " nicknamed: " .. nick)
+                    break
+                end
+            end
+        end
+        file:close()
+        -- Delete nicknames.txt after processing
+        os.remove("Chatbot" .. dirsep .. "nicknames.txt")
+    end
+end
+
 function playGeneration(showBest) --Plays through the entire generation
 	pool.maxCounter = 0
 	for s=1,#pool.species do
@@ -1648,9 +1688,9 @@ function indicatorOutput()
 	pcall(mapupdate)
 end
 
-local base64chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+base64chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
-local function toBase64(num)
+function toBase64(num)
     local result = ''
     repeat
         local remainder = num % 64
