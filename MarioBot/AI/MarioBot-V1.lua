@@ -1220,17 +1220,17 @@ BONUS_AREAS = {
 		[55]="SkyBonusB",
 		[91]="UndergroundBonus"
 	},
-	["The Lost Levels"] = {
-        	[66]="CoinBonusA",
-        	[194]="CoinBonusB",
-        	[179]="SkyBonusA",
-        	[60]="SkyBonusB",
-        	[2]="WaterBonus",
-        	[180]="12VineWarp",
-        	[193]="12PipeWarp",
-        	[68]="53Pipe",
-        	[59]="Stairs"
-	}
+    ["The Lost Levels"] = {
+        [66]="CoinBonusA",
+        [194]="CoinBonusB",
+        [179]="SkyBonusA",
+        [60]="SkyBonusB",
+        [2]="WaterBonus",
+        [180]="12VineWarp",
+        [193]="12PipeWarp",
+        [68]="53Pipe",
+        [59]="Stairs"
+    }
 }
 
 function calculateROMHashFromFile()
