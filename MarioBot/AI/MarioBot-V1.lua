@@ -1,3 +1,5 @@
+md5 = require "md5"
+
 LostLevels = 0
 Player = 1
 
@@ -117,7 +119,7 @@ function getPositions() --Returns all needed game state information from the gam
 	mazeCP = memory.readbyte(0x06D9) --number of checkpoints it has passed
 	mazeCPGoal = memory.readbyte(0x06DA) --number of checkpoints it should have passed
 	
-	timerCounter = memory.readbyte(0x0787) --counter uesd for the timer. if stays at 0 means timer is frozen
+	timerCounter = memory.readbyte(0x0787) --counter used for the timer. if stays at 0 means timer is frozen
 
 	areaType = memory.readbyte(0x074E)
 	
@@ -1009,7 +1011,6 @@ end
 
 function saveGenome(name)
 	local levelname = currentWorld .. "-" .. currentLevel  -- Name of level in the file name
-	if LostLevels == 1 then levelname = "LL" .. currentWorld .. "-" .. currentLevel end
 	local filename = "backups" .. dirsep .. levelname .. dirsep .. name .. ".lua"
 	local file = io.open(filename, "w")
 	local spec = pool.species[pool.currentSpecies]
@@ -1203,45 +1204,127 @@ function newGeneration() --runs the evolutionary algorithms to advance a generat
 	newgenProgress(20)
 end
 
---Running the game
-BonusArea = {[0]="WaterBonus",[2]="84WaterSection",[46]="SkyBonusA",[50]="WarpZone",[55]="SkyBonusB",[91]="UndergroundBonus"}
-if LostLevels == 1 then
-BonusArea = {[66]="CoinBonusA",[194]="CoinBonusB",[179]="SkyBonusA",[60]="SkyBonusB",[2]="WaterBonus",[180]="12VineWarp",[193]="12PipeWarp",[68]="53Pipe",[59]="Stairs"}
+local ROM_MD5_HASHES = {
+    ["f94bb9bb55f325d9af8a0fff80b9376d"] = "Super Mario Bros",
+    ["57cf5de00c3736919576cb804b985f57"] = "The Lost Levels",
+    -- Add more ROMs and their hashes here
+}
+
+BonusArea = {} --Empty table for unrecognized/unsupported ROM
+BONUS_AREAS = {
+	["Super Mario Bros"] = {
+		[0]="WaterBonus",
+		[2]="84WaterSection",
+		[46]="SkyBonusA",
+		[50]="WarpZone",
+		[55]="SkyBonusB",
+		[91]="UndergroundBonus"
+	},
+	["The Lost Levels"] = {
+        	[66]="CoinBonusA",
+        	[194]="CoinBonusB",
+        	[179]="SkyBonusA",
+        	[60]="SkyBonusB",
+        	[2]="WaterBonus",
+        	[180]="12VineWarp",
+        	[193]="12PipeWarp",
+        	[68]="53Pipe",
+        	[59]="Stairs"
+	}
+}
+
+function calculateROMHashFromFile()
+    local romDirectory = "LoadedROM"
+    local romFile = nil
+
+    -- Attempt to find a .nes file in the directory (Windows compatible)
+    for line in io.popen('dir "' .. romDirectory .. '" /b'):lines() do
+        if line:match("%.nes$") then
+            romFile = romDirectory .. dirsep .. line  -- Use backslash for Windows paths
+            break
+        end
+    end
+
+    if not romFile then
+        print("No ROM file found in the LoadedROM directory.")
+        return nil
+    end
+
+    -- Read the ROM file
+    local file = io.open(romFile, "rb")
+    if not file then
+        print("Failed to open ROM file.")
+        return nil
+    end
+
+    local data = file:read("*all")
+    file:close()
+
+    -- Calculate MD5 hash
+    local hash = md5.sumhexa(data)
+    print("MD5 (" .. romFile .. "): " .. hash)
+    return hash
 end
 
-Ranges = { --special ranges in which there is a fitness function modification
-	["4-4 Level"]={
-		{xrange={min=1512,max=1680},yrange={max=80},coeffs={x=1,y=0,c=112}},
-		{xrange={min=1512,max=1680},yrange={min=80,max=144},coeffs={x=-1,y=0,c=3536}},
-		{xrange={min=1512,max=1680},yrange={min=144},coeffs={x=1,y=0,c=576}},
-		{xrange={min=1680},yrange={},coeffs={x=1,y=1,c=576}},
-		{xrange={min=288,max=1200},yrange={min=80},coeffs={x=0,y=0,c=0}},
-		{xrange={min=1680,max=2288},yrange={max=144},coeffs={x=0,y=0,c=0}}},
-	["8-4 Level"]={
-		{xrange={min=2354,max=2464},yrange={},coeffs={x=0,y=1,c=2370}},
-		{xrange={min=2432,max=2464},yrange={min=64,max=80},coeffs={x=1,y=1,c=100}},
-		{xrange={min=2464,max=2600},yrange={},coeffs={x=0,y=0,c=0}},
-		{xrange={min=3678,max=3900},yrange={},coeffs={x=0,y=0,c=0}}},
-	["LL2-2 Level"]={
-		{xrange={min=3000,max=3160},yrange={min=64,max=192},coeffs={x=0,y=0,c=0}}},
-	["LL3-1 Level"]={
-		{xrange={min=3000},yrange={},coeffs={x=0,y=0,c=0}}},
-	["LL3-1 LL31Underground"]={
-		{xrange={},yrange={},coeffs={x=0,y=0,c=0}}},
-	["LL3-4 Level"]={
-		{xrange={min=1632,max=2384},yrange={min=96},coeffs={x=0,y=0,c=0}}},
-	["LL5-3 Level"]={
-		{xrange={min=592,max=630},yrange={min=96},coeffs={x=0,y=0,c=0}},
-		{xrange={min=630,max=1300},yrange={},coeffs={x=0,y=0,c=0}}},
-	["LL7-2 Level"]={
-		{xrange={min=792,max=840},yrange={min=80},coeffs={x=0,y=0,c=0}},
-		{xrange={min=840,max=1280},yrange={},coeffs={x=0,y=0,c=0}}},
-	["LL7-4 Level"]={
-		{xrange={min=1278,max=1340},yrange={min=80,max=144},coeffs={x=-1,y=1,c=2660}},
-		{xrange={min=1278,max=1340},yrange={max=80},coeffs={x=1,y=1,c=104}},
-		{xrange={min=1340},yrange={},coeffs={x=1,y=1,c=104}},
-		{xrange={min=1132},yrange={max=16},coeffs={x=0,y=0,c=0}}}
-} --Currently missing Lost Levels World 8
+Ranges = {} --Empty ranges table used when unrecognized/unsupported ROM is loaded or if no ROM is in "LoadedROM" folder/directory
+
+ROM_RANGES = {
+	["Super Mario Bros"] = {
+		["4-4 Level"] = {
+			{xrange={min=1512,max=1680},yrange={max=80},coeffs={x=1,y=0,c=112}},
+			{xrange={min=1512,max=1680},yrange={min=80,max=144},coeffs={x=-1,y=0,c=3536}},
+			{xrange={min=1512,max=1680},yrange={min=144},coeffs={x=1,y=0,c=576}},
+			{xrange={min=1680},yrange={},coeffs={x=1,y=1,c=576}},
+			{xrange={min=288,max=1200},yrange={min=80},coeffs={x=0,y=0,c=0}},
+			{xrange={min=1680,max=2288},yrange={max=144},coeffs={x=0,y=0,c=0}}},
+		["8-4 Level"] ={
+			{xrange={min=2354,max=2464},yrange={},coeffs={x=0,y=1,c=2370}},
+			{xrange={min=2432,max=2464},yrange={min=64,max=80},coeffs={x=1,y=1,c=100}},
+			{xrange={min=2464,max=2600},yrange={},coeffs={x=0,y=0,c=0}},
+			{xrange={min=3678,max=3900},yrange={},coeffs={x=0,y=0,c=0}}},
+	["The Lost Levels"] = {
+		["2-2 Level"]={
+			{xrange={min=3000,max=3160},yrange={min=64,max=192},coeffs={x=0,y=0,c=0}}},
+		["3-1 Level"]={
+			{xrange={min=3000},yrange={},coeffs={x=0,y=0,c=0}}},
+		["3-1 LL31Underground"]={
+			{xrange={},yrange={},coeffs={x=0,y=0,c=0}}},
+		["3-4 Level"]={
+			{xrange={min=1632,max=2384},yrange={min=96},coeffs={x=0,y=0,c=0}}},
+		["5-3 Level"]={
+			{xrange={min=592,max=630},yrange={min=96},coeffs={x=0,y=0,c=0}},
+			{xrange={min=630,max=1300},yrange={},coeffs={x=0,y=0,c=0}}},
+		["7-2 Level"]={
+			{xrange={min=792,max=840},yrange={min=80},coeffs={x=0,y=0,c=0}},
+			{xrange={min=840,max=1280},yrange={},coeffs={x=0,y=0,c=0}}},
+		["7-4 Level"]={
+			{xrange={min=1278,max=1340},yrange={min=80,max=144},coeffs={x=-1,y=1,c=2660}},
+			{xrange={min=1278,max=1340},yrange={max=80},coeffs={x=1,y=1,c=104}},
+			{xrange={min=1340},yrange={},coeffs={x=1,y=1,c=104}},
+			{xrange={min=1132},yrange={max=16},coeffs={x=0,y=0,c=0}}},
+		} --Missing ranges for Lost Levels 8-4
+	}
+}
+
+local romHash = calculateROMHashFromFile()
+if romHash and ROM_MD5_HASHES[romHash] then
+    local romName = ROM_MD5_HASHES[romHash]
+    if ROM_RANGES[romName] then
+        Ranges = ROM_RANGES[romName]
+        print("Activated ranges for " .. romName)
+    else
+        print("No ranges defined for " .. romName)
+    end
+
+    if BONUS_AREAS[romName] then
+        BonusArea = BONUS_AREAS[romName]
+        print("Activated bonus areas for " .. romName)
+    else
+        print("No bonus areas defined for " .. romName)
+    end
+else
+    print("Unknown or unsupported ROM.")
+end
 
 function fitness(fitstate) --Returns the distance into the level - the non-time component of fitness
 	local coeffs={x=1,y=1,c=0} --position base coefficients
@@ -1643,8 +1726,7 @@ function applyNicknames()
             end
         end
         file:close()
-        -- Delete nicknames.txt after processing
-        os.remove("Chatbot" .. dirsep .. "nicknames.txt")
+        os.remove("Chatbot"..dirsep.."nicknames.txt")
     end
 end
 
