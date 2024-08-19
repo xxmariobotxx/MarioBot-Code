@@ -16,6 +16,7 @@ Inputs = BoxSize + 3 + #InitialOscillations
 particles = {} --Little particles for fireworks when Mario makes a new max fitness
 sparksPending = false --This is used when waiting for turbo to return to normal speed for celebration when Mario makes a new max fitness
 maxFitnessPerArea = {} --A dictionary to store max fitness, X, and Y for each area.
+castleVictoryTime = 0
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -1558,8 +1559,26 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			else
 				print("Error opening winners.txt for writing.")
 			end
+
+			castleVictoryTime = fitstate.frame --Castle victory timer
 		end
-				
+
+		if castleVictoryTime > 0 and fitstate.frame - castleVictoryTime >= 30 * FPS then --30 second timeout
+			print("Castle victory timeout - triggering breakthrough replays.")
+			castleVictoryTime = 0 --Reset the timer
+
+			levelCompleted = false
+			--os.execute("python3 record.py") --Uncomment this line if you want to use this to record the winning genome in OBS
+			genome.networks = {}
+			pool.attempts = pool.attempts + 1
+			pool.totalTime = pool.totalTime + fitstate.frame
+			ProgramStartTime = os.time()
+			timerOutput()
+			replayBreakthrough()
+			timerFrozenAtAxe = false
+			return true
+		end
+
 		if prelevel == 1 then --if he beats the level
 			levelCompleted = false
 			--os.execute("python3 record.py") --Uncomment this line if you want to use this to record the winning genome in OBS
@@ -1568,25 +1587,29 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			pool.totalTime = pool.totalTime + fitstate.frame
 			ProgramStartTime = os.time()
 			timerOutput()
-			if TurboMax > 0 then --rerun with no turbo
-				TurboMin = 0
-				TurboMax = 0
-				turboOutput()
-      			Replay = true
-      			for i = 1, #pool.breakthroughfiles do
-      			  print("Replaying breakthrough: " .. pool.breakthroughfiles[i])
-      			  dofile(pool.breakthroughfiles[i]) -- Load the breakthrough genome
-      			  pool.generation = loadedgenome.gen
-      			  pool.currentSpecies = loadedgenome.s
-      			  pool.currentGenome = loadedgenome.g
-      			  playGenome(loadedgenome) -- Replay the loaded genome
-      			end
-      			pool.breakthroughfiles = {} --Reset table for breakthroughs in the next level
-      			turboUpdatedForNetwork = {} --Reset table for next level for network switches & turbo updates
-			end
+			replayBreakthrough()
 			timerFrozenAtAxe = false
 			return true
 		end
+	end
+end
+
+function replayBreakthrough()
+	if TurboMax > 0 then --rerun with no turbo
+	TurboMin = 0
+	TurboMax = 0
+	turboOutput()
+	Replay = true
+		for i = 1, #pool.breakthroughfiles do
+		  print("Replaying breakthrough: " .. pool.breakthroughfiles[i])
+		  dofile(pool.breakthroughfiles[i]) -- Load the breakthrough genome
+		  pool.generation = loadedgenome.gen
+		  pool.currentSpecies = loadedgenome.s
+		  pool.currentGenome = loadedgenome.g
+		  playGenome(loadedgenome) -- Replay the loaded genome
+		end
+	pool.breakthroughfiles = {} --Reset table for breakthroughs in the next level
+	turboUpdatedForNetwork = {} --Reset table for next level for network switches & turbo updates
 	end
 end
 
@@ -2102,6 +2125,11 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 	end
 	if DisplayNetwork then --Display the neural network state
 		local neurons = {} --Array that will contain the position and value of each displayed neuron
+		for n, neuron in pairs(network.neurons) do
+			neuron.x = 0
+			neuron.y = 0
+		end
+
 		local i = 1
 		for dy=-BoxRadius,BoxRadius do --Add the input box neurons
 			for dx=-BoxRadius,BoxRadius do
@@ -2189,17 +2217,7 @@ function displayGUI(network, fitstate) --Displays various toggleable components 
 					end
 					--draw the genome
 					color = opacity + color
-					if n1 and neuron then
-						if n1.x and neuron.x then
-							gui.drawline(n1.x+2,n1.y,neuron.x-2,neuron.y, toRGBA(color))
-						else
-							--Handle the case where either n1.x or neuron.x is nil
-							print("Warning: 'x' field is nil in either n1 or neuron. Skipping line drawing.")
-						end
-					else
-						--Handle the case where either n1 or neuron is nil
-						print("Warning: n1 or neuron is nil. Skipping line drawing.") --This should let the program keep running even when it can't draw the network. Seems to work
-					end
+					gui.drawline(n1.x+2,n1.y,neuron.x-2,neuron.y, toRGBA(color))
 				end
 			end
 		end
@@ -2334,6 +2352,7 @@ function initLevel()
 	fileFTracker:close()
 	levelNameOutput()
 	indicatorOutput()
+	writeALLGSIDs()
 end
 
 initLevel()
@@ -2356,6 +2375,7 @@ while true do
 		Replay = false
 		print("TurboMax set to "..TurboMax)
 	end
+	writeALLGSIDs()
 end
 
 return true
