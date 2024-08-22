@@ -12,7 +12,7 @@ These programs are written as a lua plugin for an emulator called FCEUX.
 The version for Super Mario Bros. 3 is entirely untouuched solely because I enjoy the 1985 version of Super Mario Bros. more than Super Mario Bros. 3. In other words, this repo is specialized in the development of the "MarioBot"
 
 Why:
-I, personally, throught that this program was cool, very interesting, and enjoyable to watch when a youtuber (https://www.youtube.com/@LuigIO) was streaming it several years ago, and I would have liked it if LuigI/O would have done ROM hacks instead of moving
+I, personally, thought that this program was cool, very interesting, and enjoyable to watch when a youtuber (https://www.youtube.com/@LuigIO) was streaming it several years ago, and I would have liked it if LuigI/O would have done ROM hacks instead of moving
 onto Super Mario Bros. 3.
 
 Goal:
