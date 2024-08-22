@@ -1237,11 +1237,18 @@ BONUS_AREAS = {
 function calculateROMHashFromFile()
     local romDirectory = "LoadedROM"
     local romFile = nil
+    local command = nil
 
-    -- Attempt to find a .nes file in the directory (Windows compatible)
-    for line in io.popen('dir "' .. romDirectory .. '" /b'):lines() do
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+    	command = 'dir "' .. romDirectory .. '" /b'
+    else
+    	'ls "' .. romDirectory .. '"'
+    end
+
+    -- Attempt to find a .nes file in the directory
+    for line in io.popen(command):lines() do
         if line:match("%.nes$") then
-            romFile = romDirectory .. dirsep .. line  -- Use backslash for Windows paths
+            romFile = romDirectory .. dirsep .. line
             break
         end
     end
