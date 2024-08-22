@@ -1242,7 +1242,7 @@ function calculateROMHashFromFile()
     if os.getenv("OS") and os.getenv("OS"):match("Windows") then
     	command = 'dir "' .. romDirectory .. '" /b'
     else
-    	'ls "' .. romDirectory .. '"'
+    	command = 'ls "' .. romDirectory .. '"'
     end
 
     -- Attempt to find a .nes file in the directory
