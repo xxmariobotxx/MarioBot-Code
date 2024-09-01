@@ -6,7 +6,9 @@ TOKEN = "" #Insert discord bot token here
 
 CHANNELID = "" #Insert channel ID here
 
-client = discord.Client()
+intents = discord.Intents.default()
+intents.messages = True
+client = discord.Client(intents=intents)
 
 @client.event
 async def on_message(message):
@@ -24,13 +26,14 @@ async def main_loop():
     for channel in client.get_all_channels():
         if str(channel.id) == CHANNELID:
             output = channel
+            break
     while True:
         await asyncio.sleep(5)
         with open("discord.txt") as f:
             message = f.read()
-            if len(message) > 0:
-                await client.send_message(output, message)
-                with open("discord.txt",mode="w") as overwrite:
+            if len(message) > 0 and output is not None:
+                await output.send(message)
+                with open("discord.txt", mode="w") as overwrite:
                     overwrite.write("")
     
 @client.event
