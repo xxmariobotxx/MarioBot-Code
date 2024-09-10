@@ -1207,6 +1207,7 @@ end
 
 local ROM_MD5_HASHES = {
     ["f94bb9bb55f325d9af8a0fff80b9376d"] = "Super Mario Bros",
+    ["c3ef6d86ca0100c4497c6654973ff5f4"] = "Super Mario Bros", --Xmas Edition
     ["57cf5de00c3736919576cb804b985f57"] = "The Lost Levels",
     -- Add more ROMs and their hashes here
 }
