@@ -2358,6 +2358,7 @@ function initLevel()
 	fileFTracker = io.open("fitnesstracker.txt","w")
 	fileFTracker:write(pool.history)
 	fileFTracker:close()
+	maxFitnessPerArea = {}
 	levelNameOutput()
 	indicatorOutput()
 	writeALLGSIDs()
