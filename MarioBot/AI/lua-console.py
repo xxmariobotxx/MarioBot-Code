@@ -1,6 +1,7 @@
 import discord
 import asyncio
 import re
+import os
 
 TOKEN = "" #Insert discord bot token here
 
@@ -29,6 +30,13 @@ async def main_loop():
             break
     while True:
         await asyncio.sleep(5)
+
+        if os.path.exists("beatlevel.txt"):
+            if output is not None:
+                await output.send("MarioBot has beaten the level!")
+            os.remove("beatlevel.txt")
+
+        
         with open("discord.txt") as f:
             message = f.read()
             if len(message) > 0 and output is not None:
