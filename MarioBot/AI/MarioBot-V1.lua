@@ -1532,6 +1532,10 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				print("Beat level")
 				writeBreakthroughOutput()
 				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .."_Winner")
+				local beatlevelfile = io.open("beatlevel.txt", "w")
+				if beatlevelFile then
+					beatlevelFile:close()
+				end
 			end
 
 			local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
@@ -1556,6 +1560,10 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				print("Beat castle")
 				writeBreakthroughOutput()
 				saveGenome("G" .. pool.generation .. "s" .. pool.currentSpecies .. "g" .. pool.currentGenome .. "_CastleWinner")
+				local beatlevelfile = io.open("beatlevel.txt", "w")
+				if beatlevelFile then
+					beatlevelFile:close()
+				end
 			end
 
 			local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
@@ -1604,6 +1612,7 @@ end
 
 function replayBreakthrough()
 	if TurboMax > 0 then --rerun with no turbo
+	maxFitnessPerArea = {}
 	TurboMin = 0
 	TurboMax = 0
 	turboOutput()
