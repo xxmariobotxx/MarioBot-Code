@@ -17,6 +17,8 @@ particles = {} --Little particles for fireworks when Mario makes a new max fitne
 sparksPending = false --This is used when waiting for turbo to return to normal speed for celebration when Mario makes a new max fitness
 maxFitnessPerArea = {} --A dictionary to store max fitness, X, and Y for each area.
 castleVictoryTime = 0
+lastLevel = false
+beatGame = false
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -1011,20 +1013,43 @@ function writetable(file,tbl) --writes a string of a table to a file
 end
 
 function saveGenome(name)
-	local levelname = currentWorld .. "-" .. currentLevel  -- Name of level in the file name
+	local levelname = currentWorld .. "-" .. currentLevel --Name of level in the file name
+	local script_path = debug.getinfo(1).source:match("@(.*)") --Get the script's absolute path
 	local filename = "backups" .. dirsep .. levelname .. dirsep .. name .. ".lua"
-	local file = io.open(filename, "w")
-	local spec = pool.species[pool.currentSpecies]
-	local genome = spec.genomes[pool.currentGenome]
-	genome.nick = spec.nick
-	genome.gen = pool.generation
-	genome.s = pool.currentSpecies
-	genome.g = pool.currentGenome
-	file:write("loadedgenome=")
-	writetable(file, genome)
-	file:close()
-	table.insert(pool.breakthroughfiles, filename)  -- Add filename to breakthroughfiles
-	print("Saved breakthrough genome to: " .. filename)
+	local absolute_path_to_file = script_path:gsub("[^" .. dirsep .. "]*$", "") .. filename --Construct the absolute path
+
+	local file = io.open(absolute_path_to_file, "w")
+	if file then
+		local spec = pool.species[pool.currentSpecies]
+		local genome = spec.genomes[pool.currentGenome]
+		genome.nick = spec.nick
+		genome.gen = pool.generation
+		genome.s = pool.currentSpecies
+		genome.g = pool.currentGenome
+		file:write("loadedgenome=")
+		writetable(file, genome)
+		file:close()
+		table.insert(pool.breakthroughfiles, absolute_path_to_file) --Add to breakthrough files
+		print("Saved breakthrough genome to: " .. absolute_path_to_file)
+
+		--If this is a winning genome, store it for later replay
+		if name:match("_Winner$") or name:match("_CastleWinner$") then
+			saveLevelWinner(absolute_path_to_file)
+		end
+	else
+		print("Error opening file for saving genome: " .. absolute_path_to_file) --Error handling
+	end
+end
+
+function saveLevelWinner(filename)
+	local file = io.open("level-winners.txt", "a")
+	if file then
+		file:write(filename.."\n")
+		file:close()
+		print("Added winning genome to level-winners.txt: "..filename)
+	else
+		print("Error opening level-winners.txt for writing.")
+	end
 end
 
 function savePool(filename) --saves the pool into a file
@@ -1398,7 +1423,9 @@ function fitness(fitstate) --Returns the distance into the level - the non-time 
 end
 
 function playGenome(genome) --Run a genome through an attempt at the level
-	savestate.load(savestateObj) --load savestate
+	if not beatGame then
+		savestate.load(savestateObj) --load savestate
+	end
 	falseload = false
 	while memory.readbyte(0x0787) == 0 do --wait until the game has fully loaded in mario
 		coroutine.yield()
@@ -1581,6 +1608,9 @@ function playGenome(genome) --Run a genome through an attempt at the level
 
 		if castleVictoryTime > 0 and fitstate.frame - castleVictoryTime >= 30 * FPS then --30 second timeout
 			print("Castle victory timeout - triggering breakthrough replays.")
+			if lastLevel then
+				print("Last level detected!")
+			end
 			castleVictoryTime = 0 --Reset the timer
 
 			levelCompleted = false
@@ -1591,6 +1621,18 @@ function playGenome(genome) --Run a genome through an attempt at the level
 			ProgramStartTime = os.time()
 			timerOutput()
 			replayBreakthrough()
+
+			lastLevel = true
+			Replay = true
+
+			if lastLevel then
+				beatGame = true
+				restartGame()
+				replayWinningGenomes()
+				os.remove("level-winners.txt")
+				lastLevel = false
+				beatGame = false
+			end
 			timerFrozenAtAxe = false
 			return true
 		end
@@ -1612,23 +1654,95 @@ end
 
 function replayBreakthrough()
 	if TurboMax > 0 then --rerun with no turbo
-	maxFitnessPerArea = {}
-	TurboMin = 0
-	TurboMax = 0
-	turboOutput()
-	Replay = true
-		for i = 1, #pool.breakthroughfiles do
-		  print("Replaying breakthrough: " .. pool.breakthroughfiles[i])
-		  dofile(pool.breakthroughfiles[i]) -- Load the breakthrough genome
-		  pool.generation = loadedgenome.gen
-		  pool.currentSpecies = loadedgenome.s
-		  pool.currentGenome = loadedgenome.g
-		  playGenome(loadedgenome) -- Replay the loaded genome
-		end
-	pool.breakthroughfiles = {} --Reset table for breakthroughs in the next level
-	turboUpdatedForNetwork = {} --Reset table for next level for network switches & turbo updates
+		maxFitnessPerArea = {}
+		TurboMin = 0
+		TurboMax = 0
+		turboOutput()
+		Replay = true
+			for i = 1, #pool.breakthroughfiles do
+			  print("Replaying breakthrough: " .. pool.breakthroughfiles[i])
+			  dofile(pool.breakthroughfiles[i]) -- Load the breakthrough genome
+			  pool.generation = loadedgenome.gen
+			  pool.currentSpecies = loadedgenome.s
+			  pool.currentGenome = loadedgenome.g
+			  playGenome(loadedgenome) -- Replay the loaded genome
+			end
+		pool.breakthroughfiles = {} --Reset table for breakthroughs in the next level
+		turboUpdatedForNetwork = {} --Reset table for next level for network switches & turbo updates
 	end
 end
+
+function replayWinningGenomes()
+	print("Replaying winnning genomes")
+
+	local file = io.open("level-winners.txt", "r")
+	if not file then
+		print("No level-winners.txt found. Skipping full game replay")
+		return
+	end
+
+	local winnerFilenames = {}
+	for line in file:lines() do
+		table.insert(winnerFilenames, line) --Read all filenames into a table first
+	end
+	file:close()
+
+	local winnerIndex = 1
+	local currentLevelKey = "1-1" --Initialize for level transition checks
+
+	while true do
+		local filename = winnerFilenames[winnerIndex]
+		if not filename then
+			print("Finished replaying level winners or no winner found for a level.")
+			break
+		end
+
+		print("Replaying winning genome for a level: " .. filename)
+		local file = io.open(filename, "r") --Check if file exists
+		if not file then
+			print("Error: Could not open winning genome file: " .. filename)
+			winnerIndex = winnerIndex + 1 --Skip this file
+		else
+			file:close() --Close after checking; dofile will open it again
+			dofile(filename) --Safe to load now
+			pool.generation = loadedgenome.gen
+			pool.currentSpecies = loadedgenome.s
+			pool.currentGenome = loadedgenome.g
+			playGenome(loadedgenome)
+
+			winnerIndex = winnerIndex + 1
+		end
+
+		--Yield and check for level transitions *after* playing genome
+		while true do
+			getPositions()
+			local newLevelKey = currentWorld .. "-" .. currentLevel
+			if newLevelKey ~= currentLevelKey then
+				currentLevelKey = newLevelKey
+				break --Proceed to the next winner
+			end
+			coroutine.yield()
+		end
+
+	end
+end
+
+function restartGame()
+	print("Restarting game...")
+	emu.poweron()
+
+	for i = 1, 60 do
+		joypad.set(1, {})
+		coroutine.yield()
+	end
+
+	for i = 1, 30 do
+		joypad.set(1, {start = true})
+		coroutine.yield()
+	end
+	joypad.set(1, {})
+end
+
 
 function spawnParticles()
     local numParticles = 20 -- Adjust as needed
@@ -2391,6 +2505,7 @@ while true do
 		TurboMax = 1
 		turboOutput()
 		Replay = false
+		lastLevel = false
 		print("TurboMax set to "..TurboMax)
 	end
 	writeALLGSIDs()
