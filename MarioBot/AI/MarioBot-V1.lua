@@ -1286,6 +1286,10 @@ ROM_RANGES = {
 			{xrange={min=1680},yrange={},coeffs={x=1,y=1,c=576}},
 			{xrange={min=288,max=1200},yrange={min=80},coeffs={x=0,y=0,c=0}},
 			{xrange={min=1680,max=2288},yrange={max=144},coeffs={x=0,y=0,c=0}}},
+		["6-2 Level"] = {
+			{xrange={min=500,max=2062},yrange={min=0},coeffs={x=1,y=1,c=2200}},
+			{xrange={min=2292},yrange={min=0},coeffs={x=1,y=1,c=2200}}
+		},
 		["8-4 Level"] ={
 			{xrange={min=2354,max=2464},yrange={},coeffs={x=0,y=1,c=2370}},
 			{xrange={min=2432,max=2464},yrange={min=64,max=80},coeffs={x=1,y=1,c=100}},
