@@ -1,5 +1,10 @@
 md5 = require "md5"
 
+local OperModeAddr = 0x0770
+local Joypad1Addr = 0x06FC
+local TitleScreenModeValue = 0
+local GameModeValue = 1
+
 LostLevels = 0
 Player = 1
 
@@ -17,6 +22,8 @@ particles = {} --Little particles for fireworks when Mario makes a new max fitne
 sparksPending = false --This is used when waiting for turbo to return to normal speed for celebration when Mario makes a new max fitness
 maxFitnessPerArea = {} --A dictionary to store max fitness, X, and Y for each area.
 castleVictoryTime = 0
+local gameStartedAndStateSaved = false
+local framesToWaitAfterStart = 5
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -79,6 +86,132 @@ currentTurbo = false
 dirsep = "\\" --forward or backward slash for file separation? depends on OS
 
 ProgramStartTime = os.time()
+
+function ensureInitialSavestate()
+    print("Ensuring consistent game start and initial savestate creation...")
+    local currentOperMode = memory.readbyte(OperModeAddr)
+
+    -- 1. Check if NOT on the title screen. If so, POWER CYCLE.
+    if currentOperMode ~= TitleScreenModeValue then
+        print("Not on title screen (OperMode=" .. currentOperMode .. "). Power cycling emulator...")
+        emu.poweron()
+        print("Waiting for NMI/Frame Counter activity after power cycle...")
+
+        -- Wait until FrameCounter ($09) starts incrementing reliably
+        local frameCounter = memory.readbyte(0x09)
+        local stableFrames = 0
+        local requiredStableFrames = 5
+        local poweronWaitFrames = 0
+        local maxPoweronWait = 900 -- 15 seconds
+
+        while stableFrames < requiredStableFrames do
+            coroutine.yield()
+            poweronWaitFrames = poweronWaitFrames + 1
+            local newFrameCounter = memory.readbyte(0x09)
+            if newFrameCounter ~= frameCounter then
+                if (newFrameCounter > frameCounter) or (newFrameCounter < 20 and frameCounter > 230) then
+                     stableFrames = stableFrames + 1
+                else
+                    stableFrames = 0
+                end
+                frameCounter = newFrameCounter
+            else
+                 stableFrames = 0
+            end
+            if poweronWaitFrames > maxPoweronWait then
+                print("ERROR: Timed out waiting for stable FrameCounter activity after poweron. Aborting.")
+                return false
+            end
+        end
+        print("Frame Counter active (" .. stableFrames .. " increments seen). Emulator likely ready.")
+
+        -- Now apply the user's successful input timing
+        print("Applying input sequence...")
+
+        -- Wait 60 frames with no input (as per user's restartGame)
+        print("Clearing input for 60 frames...")
+        for i = 1, 60 do
+            joypad.set(Player, {}) -- Using Player variable (should be 1)
+            coroutine.yield()
+        end
+
+        -- Press and Hold Start for 30 frames (as per user's restartGame)
+        print("Pressing and holding Start for 30 frames...")
+        for i = 1, 30 do
+            joypad.set(Player, {start = true})
+            coroutine.yield()
+        end
+
+        -- Release Start (as per user's restartGame)
+        print("Releasing Start...")
+        joypad.set(Player, {})
+        -- Add a small buffer after release
+        for _ = 1, 5 do coroutine.yield() end
+
+        -- Check if we actually reached the title screen state if we reset
+        currentOperMode = memory.readbyte(OperModeAddr)
+        if currentOperMode == TitleScreenModeValue then
+            print("WARNING: Still on title screen after input sequence. Input likely failed.")
+            -- Maybe add a retry mechanism here if needed later?
+            return false -- Indicate failure for now
+        end
+        print("Mode changed from Title Screen (OperMode=" .. currentOperMode .. ").")
+
+    else
+         print("Already on title screen. Applying input sequence...")
+         -- Apply the user's successful input timing directly if already on title screen
+
+         print("Clearing input for 60 frames...")
+         for i = 1, 60 do
+             joypad.set(Player, {})
+             coroutine.yield()
+         end
+
+         print("Pressing and holding Start for 30 frames...")
+         for i = 1, 30 do
+             joypad.set(Player, {start = true})
+             coroutine.yield()
+         end
+
+         print("Releasing Start...")
+         joypad.set(Player, {})
+         for _ = 1, 5 do coroutine.yield() end
+
+         currentOperMode = memory.readbyte(OperModeAddr)
+         if currentOperMode == TitleScreenModeValue then
+             print("ERROR: Started on title screen, but failed to transition after input. Aborting.")
+             return false
+         end
+         print("Mode changed from Title Screen (OperMode=" .. currentOperMode .. ").")
+    end
+
+    -- 3. Verify we are now in Game Mode (or wait briefly if needed)
+    print("Verifying Game Mode...")
+    local finalMode = memory.readbyte(OperModeAddr)
+    local waitFramesVerify = 0
+    local maxWaitVerify = 30 -- Short wait just in case
+
+    while finalMode ~= GameModeValue do
+        coroutine.yield()
+        finalMode = memory.readbyte(OperModeAddr)
+        waitFramesVerify = waitFramesVerify + 1
+        if waitFramesVerify > maxWaitVerify then
+            print("ERROR: Did not reach Game Mode (1) after input sequence. Final Mode: " .. finalMode .. ". Aborting.")
+            return false -- Indicate failure
+        end
+    end
+
+    -- 4. Game mode reached. Save the initial state.
+    print("Game mode reached (OperMode=" .. finalMode .. "). Saving initial state to slot " .. savestateSlot)
+    if not savestateObj then
+        savestateObj = savestate.object(savestateSlot)
+    end
+    savestate.save(savestateObj)
+    for _ = 1, 10 do coroutine.yield() end -- Short pause after saving
+    print("Initial savestate created successfully.")
+    return true -- Indicate success
+end
+--- END OF REVISED AUTO-START FUNCTION (v10 - User's Timing Logic) ---
 
 --Stuff for getting inputs to the AI
 function platformSize() --Finds whether the platforms are large or small in the current level
@@ -290,6 +423,13 @@ function initPool() --The pool contains all data for the genetics of the AI
 	pool.breakthroughX = 0 --indicator stuff
 	pool.breakthroughZ = ""
 	pool.breakthroughfiles = {}
+end
+
+local initStateOK = ensureInitialSavestate()
+if not initStateOK then
+    -- Stop the script if the initial state setup failed
+    print("Aborting script due to initial state setup failure.")
+    return -- Use 'return' if this is the main chunk, or error() if inside another function
 end
 
 function newSpecies() --Each species is a group of genomes that are similar
