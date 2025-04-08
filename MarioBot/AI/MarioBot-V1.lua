@@ -91,9 +91,9 @@ function ensureInitialSavestate()
     print("Ensuring consistent game start and initial savestate creation...")
     local currentOperMode = memory.readbyte(OperModeAddr)
 
-    -- 1. Check if NOT on the title screen. If so, POWER CYCLE.
+    -- 1. Check if NOT on the title screen/demo. If so, POWER CYCLE.
     if currentOperMode ~= TitleScreenModeValue then
-        print("Not on title screen (OperMode=" .. currentOperMode .. "). Power cycling emulator...")
+        print("Not on title screen/demo (OperMode=" .. currentOperMode .. "). Power cycling emulator...")
         emu.poweron()
         print("Waiting for NMI/Frame Counter activity after power cycle...")
 
@@ -112,106 +112,121 @@ function ensureInitialSavestate()
                 if (newFrameCounter > frameCounter) or (newFrameCounter < 20 and frameCounter > 230) then
                      stableFrames = stableFrames + 1
                 else
-                    stableFrames = 0
+                    stableFrames = 0 -- Reset if counter decreases unexpectedly (except wraparound)
                 end
                 frameCounter = newFrameCounter
             else
-                 stableFrames = 0
+                 stableFrames = 0 -- Reset if counter stalls
             end
             if poweronWaitFrames > maxPoweronWait then
                 print("ERROR: Timed out waiting for stable FrameCounter activity after poweron. Aborting.")
                 return false
             end
         end
-        print("Frame Counter active (" .. stableFrames .. " increments seen). Emulator likely ready.")
+        print("Frame Counter active (" .. stableFrames .. " stable increments seen). Emulator likely ready.")
+        print("Applying input sequence post-power cycle...")
 
-        -- Now apply the user's successful input timing
-        print("Applying input sequence...")
-
-        -- Wait 60 frames with no input (as per user's restartGame)
         print("Clearing input for 60 frames...")
         for i = 1, 60 do
-            joypad.set(Player, {}) -- Using Player variable (should be 1)
+            joypad.set(Player, {})
             coroutine.yield()
         end
 
-        -- Press and Hold Start for 30 frames (as per user's restartGame)
         print("Pressing and holding Start for 30 frames...")
         for i = 1, 30 do
             joypad.set(Player, {start = true})
             coroutine.yield()
         end
 
-        -- Release Start (as per user's restartGame)
         print("Releasing Start...")
         joypad.set(Player, {})
-        -- Add a small buffer after release
-        for _ = 1, 5 do coroutine.yield() end
+        for _ = 1, 5 do coroutine.yield() end -- Small buffer after release
 
-        -- Check if we actually reached the title screen state if we reset
+        -- Verify transition after power cycle + input
         currentOperMode = memory.readbyte(OperModeAddr)
         if currentOperMode == TitleScreenModeValue then
-            print("WARNING: Still on title screen after input sequence. Input likely failed.")
-            -- Maybe add a retry mechanism here if needed later?
-            return false -- Indicate failure for now
+            print("ERROR: Power cycled, but failed to transition off title screen after input. Aborting.")
+            return false
         end
-        print("Mode changed from Title Screen (OperMode=" .. currentOperMode .. ").")
+        print("Mode changed after power cycle (OperMode=" .. currentOperMode .. ").")
 
+    -- 2. Handle the case where we start on the Title Screen or in the Demo
     else
-         print("Already on title screen. Applying input sequence...")
-         -- Apply the user's successful input timing directly if already on title screen
+         print("On title screen or in demo (OperMode=" .. currentOperMode .. "). Attempting to exit demo if active...")
 
+         for i = 1, 5 do -- Press Start for 5 frames
+             joypad.set(Player, {start = true})
+             coroutine.yield()
+         end
+         joypad.set(Player, {}) -- Release Start
+         print("Waiting after brief Start press...")
+         for i = 1, 20 do -- Wait 20 frames for game to potentially return to static title
+             joypad.set(Player, {})
+             coroutine.yield()
+         end
+         print("Brief wait finished. Applying main start sequence...")
+
+         -- Wait 60 frames with no input
          print("Clearing input for 60 frames...")
          for i = 1, 60 do
              joypad.set(Player, {})
              coroutine.yield()
          end
 
+         -- Press and Hold Start for 30 frames
          print("Pressing and holding Start for 30 frames...")
          for i = 1, 30 do
              joypad.set(Player, {start = true})
              coroutine.yield()
          end
 
+         -- Release Start
          print("Releasing Start...")
          joypad.set(Player, {})
-         for _ = 1, 5 do coroutine.yield() end
+         for _ = 1, 5 do coroutine.yield() end -- Small buffer after release
 
+         -- Verify transition after title screen/demo + input sequence
          currentOperMode = memory.readbyte(OperModeAddr)
          if currentOperMode == TitleScreenModeValue then
-             print("ERROR: Started on title screen, but failed to transition after input. Aborting.")
+             print("ERROR: Started on title screen/demo, but failed to transition after full input sequence. Aborting.")
              return false
          end
-         print("Mode changed from Title Screen (OperMode=" .. currentOperMode .. ").")
+         print("Mode changed from Title Screen/Demo (OperMode=" .. currentOperMode .. ").")
     end
 
     -- 3. Verify we are now in Game Mode (or wait briefly if needed)
     print("Verifying Game Mode...")
     local finalMode = memory.readbyte(OperModeAddr)
     local waitFramesVerify = 0
-    local maxWaitVerify = 30 -- Short wait just in case
+    local maxWaitVerify = 60 -- Increased slightly, just in case transitions take longer
 
     while finalMode ~= GameModeValue do
         coroutine.yield()
         finalMode = memory.readbyte(OperModeAddr)
         waitFramesVerify = waitFramesVerify + 1
         if waitFramesVerify > maxWaitVerify then
-            print("ERROR: Did not reach Game Mode (1) after input sequence. Final Mode: " .. finalMode .. ". Aborting.")
+            print("ERROR: Did not reach Game Mode ("..GameModeValue..") after input sequence. Final Mode: " .. finalMode .. ". Aborting.")
             return false -- Indicate failure
+        end
+        -- Optional: Check if we somehow fell back to title screen during verification wait
+        if finalMode == TitleScreenModeValue and waitFramesVerify > 10 then
+            print("ERROR: Transitioned off title screen, but fell back during verification wait. Aborting.")
+            return false
         end
     end
 
-    -- 4. Game mode reached. Save the initial state.
-    print("Game mode reached (OperMode=" .. finalMode .. "). Saving initial state to slot " .. savestateSlot)
-    if not savestateObj then
-        savestateObj = savestate.object(savestateSlot)
-    end
+    -- 4. Game mode reached. Wait a few frames for stability then Save the initial state.
+    print("Game mode reached (OperMode=" .. finalMode .. "). Waiting briefly before saving state...")
+    for _ = 1, framesToWaitAfterStart do coroutine.yield() end -- Use the existing variable
+
+    print("Saving initial state to slot " .. savestateSlot)
+    -- Re-create savestate object just before saving to ensure it's valid
+    savestateObj = savestate.object(savestateSlot)
     savestate.save(savestateObj)
-    for _ = 1, 10 do coroutine.yield() end -- Short pause after saving
     print("Initial savestate created successfully.")
+    gameStartedAndStateSaved = true -- Set the flag indicating success
     return true -- Indicate success
 end
---- END OF REVISED AUTO-START FUNCTION (v10 - User's Timing Logic) ---
 
 --Stuff for getting inputs to the AI
 function platformSize() --Finds whether the platforms are large or small in the current level
