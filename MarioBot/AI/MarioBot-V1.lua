@@ -24,6 +24,7 @@ maxFitnessPerArea = {} --A dictionary to store max fitness, X, and Y for each ar
 castleVictoryTime = 0
 local gameStartedAndStateSaved = false
 local framesToWaitAfterStart = 5
+levelWinnersCache = {}
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -79,7 +80,7 @@ FramesOfDeathAnimation = 50 --amount of the death animation to show
 FPS = 50+10*LostLevels
 
 TurboMin = 0
-TurboMax = 1 --Is this even necessary anymore?
+TurboMax = 1
 CompleteAutoTurbo = false
 currentTurbo = false
 
@@ -446,6 +447,63 @@ if not initStateOK then
     print("Aborting script due to initial state setup failure.")
     return -- Use 'return' if this is the main chunk, or error() if inside another function
 end
+
+function findWinnerFile(directory, levelname)
+    local command = ""
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. directory .. '" /b /a-d'
+    else
+        command = 'ls -p "' .. directory .. '" | grep -v /'
+    end
+
+    local pipe = io.popen(command)
+    if not pipe then
+       -- print("Warning: Could not list directory: " .. directory)
+       return nil
+    end
+
+    local winnerFile = nil
+    local castleWinnerFile = nil -- Prioritize castle winners
+
+    for filename in pipe:lines() do
+        if filename:match("_CastleWinner%.lua$") then
+            castleWinnerFile = directory .. dirsep .. filename
+            break -- Found the best kind of winner
+        elseif filename:match("_Winner%.lua$") and not winnerFile then -- Only store the first non-castle winner found
+             winnerFile = directory .. dirsep .. filename
+        end
+    end
+    pipe:close()
+
+    -- Return castle winner if found, otherwise the regular winner (or nil)
+    return castleWinnerFile or winnerFile
+end
+
+-- Function to scan all potential level directories and populate the cache
+function scanForAllWinners()
+    print("Scanning for all level winners...")
+    levelWinnersCache = {} -- Clear previous cache if rescanning
+    local maxWorld = 8 -- Adjust if needed for different game versions/mods
+    local maxLevel = 4
+
+    for w = 1, maxWorld do
+        for l = 1, maxLevel do
+            local levelname = w .. "-" .. l
+             if LostLevels == 1 then levelname = "LL" .. levelname end
+             local directory = "backups" .. dirsep .. levelname
+             local winner = findWinnerFile(directory, levelname) -- Use the modified finder
+             if winner then
+                 levelWinnersCache[w .. "-" .. l] = winner
+                 print("Cached winner for " .. w .. "-" .. l .. ": " .. winner)
+             end
+             -- Small yield to prevent freezing UI during scan, adjust as needed
+             if (w * l) % 5 == 0 then coroutine.yield() end
+        end
+    end
+    print("Winner scan complete.")
+end
+
+scanForAllWinners()
 
 function newSpecies() --Each species is a group of genomes that are similar
     local species = {}
@@ -1766,6 +1824,7 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				if beatlevelFile then
 					beatlevelFile:close()
 				end
+
 				local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
 				if winnersFile then
 					local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
@@ -1776,7 +1835,6 @@ function playGenome(genome) --Run a genome through an attempt at the level
 					print("Error opening winners.txt for writing.")
 				end
 			end
-
 
 			castleVictoryTime = fitstate.frame --Castle victory timer
 		end
@@ -2598,146 +2656,145 @@ initializeBackupDirectory()
 	writeALLGSIDs()
 end]]
 
--- ***** NEW: Replay Loop *****
 print("Starting replay check...")
 Replay = true -- Assume replay mode initially
-local lastWinnerGenomeData = nil -- To potentially seed the next level
+local lastWinnerGenomeData = nil
 
 while Replay do
-    getPositions() -- Make sure currentWorld/Level are up-to-date
-    levelNameOutput() -- Update level display file
-    initializeBackupDirectory() -- Ensure directory exists for current level
+    getPositions()
+    levelNameOutput()
+    initializeBackupDirectory() -- Still needed in case the dir wasn't created yet
 
-    local winnerFilename = findWinnerForLevel(currentWorld, currentLevel)
+    local currentLevelKey = currentWorld .. "-" .. currentLevel
+    local winnerFilename = levelWinnersCache[currentLevelKey] -- Fast table lookup
 
     if winnerFilename then
-        print("Attempting to replay winner: " .. winnerFilename)
-        local loadSuccess, loadError = pcall(dofile, winnerFilename) -- Use pcall for safety
+        print("Cached winner found for " .. currentLevelKey .. ". Attempting replay.")
+        local loadSuccess, loadError = pcall(dofile, winnerFilename)
         if not loadSuccess or not loadedgenome then
             print("ERROR: Failed to load or execute winner file: " .. winnerFilename)
             print("Load Error: " .. tostring(loadError))
             print("Stopping replay.")
-            Replay = false -- Stop replay on error
+            Replay = false
             break
         end
 
+        pool.generation = loadedgenome.gen
+		pool.currentSpecies = loadedgenome.s
+		pool.currentGenome = loadedgenome.g
+
         print("Winner genome loaded. Starting replay for " .. currentWorld .. "-" .. currentLevel)
-        TurboMin = 0 -- Ensure consistent replay speed
+        TurboMin = 0
         TurboMax = 0
-        turboUpdatedForNetwork = {} -- Reset turbo flags for replay
-        maxFitnessPerArea = {} -- Reset area fitness tracking for replay
-        pool.breakthroughfiles = {} -- Clear breakthrough files for the replay itself
+        turboUpdatedForNetwork = {}
+        maxFitnessPerArea = {}
+        pool.breakthroughfiles = {}
         turboOutput()
 
-        -- Store data of the winner we are about to replay
-        -- This is a shallow copy, be mindful if `loadedgenome` gets modified deeply
         lastWinnerGenomeData = loadedgenome
-
-        local wonLevel = playGenome(loadedgenome) -- Replay the level
+        local wonLevel = playGenome(loadedgenome)
 
         if wonLevel then
             print("Replay successful for " .. currentWorld .. "-" .. currentLevel .. ". Preparing for next level.")
 
-            -- Wait for the game state to settle after winning (e.g., past prelevel screen)
             print("Waiting for level transition to complete...")
             local transitionWaitFrames = 0
-            local maxTransitionWait = 300 -- 5 seconds, should be plenty
-            while memory.readbyte(0x0757) == 1 and transitionWaitFrames < maxTransitionWait do -- Wait while prelevel screen (0x0757) is 1
+            local maxTransitionWait = 300
+            while memory.readbyte(0x0757) == 1 and transitionWaitFrames < maxTransitionWait do
                 coroutine.yield()
                 transitionWaitFrames = transitionWaitFrames + 1
             end
-             if transitionWaitFrames >= maxTransitionWait then
-                 print("WARN: Waited a long time for prelevel screen to clear, proceeding anyway.")
+            if transitionWaitFrames >= maxTransitionWait then
+                print("WARN: Waited a long time for prelevel screen to clear, proceeding anyway.")
             end
-            -- Add a small fixed delay just in case
-            for _ = 1, 15 do coroutine.yield() end
 
-            getPositions() -- Get the NEW world/level after transition
+            getPositions()
             print("Transitioned to: World " .. currentWorld .. ", Level " .. currentLevel)
 
-            -- Save state for the START of the NEXT level
             savestateSlot = savestateSlot + 1
-            if savestateSlot == 10 then savestateSlot = 1 end -- Handle wraparound
+            if savestateSlot > 9 then savestateSlot = 1 end -- Fixed wraparound logic
             print("Saving state for start of " .. currentWorld .. "-" .. currentLevel .. " to slot " .. savestateSlot)
             savestateObj = savestate.object(savestateSlot)
-            savestate.save(savestateObj)
+            savestate.save(savestateObj) -- Save state happens here
             print("Savestate saved.")
-            -- No need to re-initialize pool here, just continue the loop
+            -- Loop continues to check the cache for the *new* currentLevelKey
 
         else
             print("ERROR: Replay failed (timeout or death) for " .. currentWorld .. "-" .. currentLevel .. ". Stopping replay.")
-            Replay = false -- Stop replay if the winner fails
+            Replay = false
             break
         end
     else
-        print("No winner found for " .. currentWorld .. "-" .. currentLevel .. ". Ending replay mode.")
-        Replay = false -- Exit the loop if no winner is found
+        print("No cached winner found for " .. currentWorld .. "-" .. currentLevel .. ". Ending replay mode.")
+        Replay = false
     end
 end
 
--- ***** Replay Loop Ends *****
-
 print("Replay phase finished. Preparing for NEAT training on " .. currentWorld .. "-" .. currentLevel)
--- Reset turbo settings for normal training (might be adjusted by NEAT later)
 TurboMin = 0
-TurboMax = 4000
+TurboMax = 1
 turboOutput()
 
--- Initialize the pool for the first unsolved level
-initLevel() -- This will now run for the level where replay stopped
--- Optional: Seeding with the last winner could be added to initLevel if desired
-if lastWinnerGenomeData then
-   print("Seeding pool with last winner...")
-   -- (Code in initLevel to handle this seed)
-end
+initLevel() -- Initialize pool for the first unsolved level
 
--- Ensure backup directory exists *before* starting the main loop
-initializeBackupDirectory()
+initializeBackupDirectory() -- Ensure directory exists
 
--- ***** Existing Main Training Loop Starts Here *****
 print("Starting main NEAT training loop...")
 while true do
+    -- Store current level before starting the generation
+    local trainingWorld = currentWorld
+    local trainingLevel = currentLevel
+
 	redospectop = pool.generation == 0
 	while not playGeneration(redospectop) do
 		newGeneration()
 		redospectop = false
 	end
     -- Level completed during TRAINING run
-	print("Level " .. currentWorld .. "-" .. currentLevel .. " beaten during training. Saving state and advancing.")
+    local completedLevelKey = trainingWorld .. "-" .. trainingLevel -- Use the stored values
+	print("Level " .. completedLevelKey .. " beaten during training. Saving state and advancing.")
 
-    -- Similar transition wait as in replay loop
+    -- Update Winner Cache
+    if #pool.breakthroughfiles > 0 then
+        local newWinnerFile = pool.breakthroughfiles[#pool.breakthroughfiles]
+        -- Ensure the filename actually contains "_Winner" or "_CastleWinner"
+        if newWinnerFile:match("_Winner%.lua$") or newWinnerFile:match("_CastleWinner%.lua$") then
+             print("Updating winner cache for " .. completedLevelKey .. " with " .. newWinnerFile)
+             levelWinnersCache[completedLevelKey] = newWinnerFile
+         else
+             print("WARN: Last breakthrough file doesn't seem to be a winner file: " .. newWinnerFile)
+         end
+    end
+
+    -- (Rest of the transition wait, savestate, initLevel, etc. remains the same)
     print("Waiting for level transition to complete...")
     local transitionWaitFrames = 0
-    local maxTransitionWait = 300 -- 5 seconds
+    local maxTransitionWait = 300
     while memory.readbyte(0x0757) == 1 and transitionWaitFrames < maxTransitionWait do
         coroutine.yield()
         transitionWaitFrames = transitionWaitFrames + 1
     end
-     if transitionWaitFrames >= maxTransitionWait then
-         print("WARN: Waited a long time for prelevel screen to clear (training), proceeding anyway.")
-     end
-    for _ = 1, 15 do coroutine.yield() end
+    if transitionWaitFrames >= maxTransitionWait then
+        print("WARN: Waited a long time for prelevel screen to clear (training), proceeding anyway.")
+    end
 
     getPositions() -- Update to the new level
     print("Transitioned to: World " .. currentWorld .. ", Level " .. currentLevel)
 
 	savestateSlot=savestateSlot+1
-	if savestateSlot==10 then savestateSlot=1 end
+	if savestateSlot > 9 then savestateSlot = 1 end
 	print("Saving state for start of " .. currentWorld .. "-" .. currentLevel .. " to slot " .. savestateSlot)
 	savestateObj = savestate.object(savestateSlot)
 	savestate.save(savestateObj)
     print("Savestate saved.")
 
-    -- Re-initialize pool and directory for the new level
-	initLevel()
+    initLevel()
 	initializeBackupDirectory()
 
-	-- Check if we just finished a replay sequence and need to reset TurboMax
-	if Replay and #pool.breakthroughfiles == 0 then -- Check if Replay *was* true before this training iteration started
-		TurboMax = 4000 -- Reset TurboMax after replays finish and training starts
+	if pool.generation <= 1 then -- Reset turbo if it's the start of training for a level
+		TurboMax = 1
 		turboOutput()
-		Replay = false -- Ensure Replay is false now
-		print("TurboMax reset to "..TurboMax .. " after replay sequence.")
+		print("TurboMax reset to " .. TurboMax .. " at start of training.")
 	end
 	writeALLGSIDs()
 end
