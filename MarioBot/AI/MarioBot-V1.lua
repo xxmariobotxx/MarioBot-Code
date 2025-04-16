@@ -448,17 +448,42 @@ if not initStateOK then
     return -- Use 'return' if this is the main chunk, or error() if inside another function
 end
 
-function findWinnerFile(directory, levelname)
+-- Searches for a winner genome file within a specific level's backup directory.
+function findWinnerFile(directory, levelname) -- Takes directory and levelname as args
     local command = ""
+
     if os.getenv("OS") and os.getenv("OS"):match("Windows") then
-        command = 'dir "' .. directory .. '" /b /a-d'
+        command = 'dir "' .. directory .. '" /b /a-d 2> nul'
     else
-        command = 'ls -p "' .. directory .. '" | grep -v /'
+        command = 'find "' .. directory .. '" -maxdepth 0 -type d -print 2> /dev/null' -- Check if the base dir exists
+    end
+
+    -- First check if the directory itself exists to avoid errors listing its contents
+    local dir_exists_pipe = io.popen(command)
+    local dir_exists = false
+    if dir_exists_pipe then
+        if dir_exists_pipe:read("*a") ~= "" then -- Check if command returned anything
+           dir_exists = true
+        end
+        dir_exists_pipe:close()
+    end
+
+    if not dir_exists then
+        print("Directory does not exist: " .. directory)
+        return nil
+    end
+
+    -- If directory exists, list its *files* to find winners
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. directory .. '" /b /a-d 2> nul' -- List files only now
+    else
+         command = 'ls -p "' .. directory .. '" | grep -v / 2> /dev/null' -- List files only (no trailing /)
     end
 
     local pipe = io.popen(command)
     if not pipe then
-       -- print("Warning: Could not list directory: " .. directory)
+       -- This shouldn't happen if dir_exists check passed, but good to be safe
+       print("Warning: Could not list files in directory: " .. directory)
        return nil
     end
 
@@ -466,11 +491,14 @@ function findWinnerFile(directory, levelname)
     local castleWinnerFile = nil -- Prioritize castle winners
 
     for filename in pipe:lines() do
+        -- Check for winner patterns
         if filename:match("_CastleWinner%.lua$") then
             castleWinnerFile = directory .. dirsep .. filename
+            print("Found Castle Winner: " .. filename)
             break -- Found the best kind of winner
         elseif filename:match("_Winner%.lua$") and not winnerFile then -- Only store the first non-castle winner found
-             winnerFile = directory .. dirsep .. filename
+            winnerFile = directory .. dirsep .. filename
+            print("Found Level Winner: " .. filename)
         end
     end
     pipe:close()
@@ -479,27 +507,57 @@ function findWinnerFile(directory, levelname)
     return castleWinnerFile or winnerFile
 end
 
--- Function to scan all potential level directories and populate the cache
-function scanForAllWinners()
-    print("Scanning for all level winners...")
-    levelWinnersCache = {} -- Clear previous cache if rescanning
-    local maxWorld = 8 -- Adjust if needed for different game versions/mods
-    local maxLevel = 4
 
-    for w = 1, maxWorld do
-        for l = 1, maxLevel do
-            local levelname = w .. "-" .. l
-             if LostLevels == 1 then levelname = "LL" .. levelname end
-             local directory = "backups" .. dirsep .. levelname
-             local winner = findWinnerFile(directory, levelname) -- Use the modified finder
-             if winner then
-                 levelWinnersCache[w .. "-" .. l] = winner
-                 print("Cached winner for " .. w .. "-" .. l .. ": " .. winner)
-             end
-             -- Small yield to prevent freezing UI during scan, adjust as needed
-             if (w * l) % 5 == 0 then coroutine.yield() end
-        end
+-- Function to scan all existing backup directories and populate the cache
+function scanForAllWinners()
+    print("Scanning existing backup directories for winners...")
+    levelWinnersCache = {} -- Clear previous cache if rescanning
+    local backupsDir = "backups"
+    local command = ""
+
+    -- Command to list subdirectories within the backups directory
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. backupsDir .. '" /b /ad 2> nul'
+    else
+        command = 'find "' .. backupsDir .. '" -maxdepth 1 -mindepth 1 -type d -print 2> /dev/null'
     end
+
+    local pipe = io.popen(command)
+    if not pipe then
+        print("Warning: Could not list backup directory: " .. backupsDir .. ". No winners cached.")
+        return
+    end
+
+    for dirEntry in pipe:lines() do
+        -- Extract the base directory name from the full path if necessary
+        local levelDirName = dirEntry:match("([^\\/]+)$") -- Get the last part of the path
+
+        if levelDirName then
+            local world, level, llPrefix
+            local levelKey = nil
+
+            -- Try matching W-L
+            world, level = levelDirName:match("(%d+)-(%d+)$")
+            if world then
+				levelKey = world .. "-" .. level
+            end
+
+            if levelKey then
+                local fullDirPath = backupsDir .. dirsep .. levelDirName -- Full path for findWinnerFile
+
+                -- Call the existing file finder for this specific directory
+                local winner = findWinnerFile(fullDirPath, levelDirName)
+                if winner then
+                    levelWinnersCache[levelKey] = winner -- Use W-L as the key
+                    print("Cached winner for " .. levelKey .. ": " .. winner)
+                end
+            else
+                print("Skipping directory, doesn't match W-L or LLW-L pattern: " .. levelDirName)
+            end
+        end
+        coroutine.yield() -- Yield occasionally to prevent freezing UI
+    end
+    pipe:close()
     print("Winner scan complete.")
 end
 
