@@ -2693,30 +2693,9 @@ end
 
 initLevel()
 initializeBackupDirectory()
---[[while true do
-	redospectop = pool.generation == 0
-	while not playGeneration(redospectop) do
-		newGeneration()
-		redospectop = false
-	end
-	savestateSlot=savestateSlot+1
-	if savestateSlot==10 then savestateSlot=1 end
-	savestateObj = savestate.object(savestateSlot)
-	savestate.save(savestateObj)
-	initLevel()
-	initializeBackupDirectory()
-	if Replay and #pool.breakthroughfiles == 0 then --This is useful for getting through the generations where Mario does a lot of standing around
-		TurboMax = 1
-		turboOutput()
-		Replay = false
-		print("TurboMax set to "..TurboMax)
-	end
-	writeALLGSIDs()
-end]]
 
 print("Starting replay check...")
 Replay = true -- Assume replay mode initially
-local lastWinnerGenomeData = nil
 
 while Replay do
     getPositions()
@@ -2749,7 +2728,6 @@ while Replay do
         pool.breakthroughfiles = {}
         turboOutput()
 
-        lastWinnerGenomeData = loadedgenome
         local wonLevel = playGenome(loadedgenome)
 
         if wonLevel then
@@ -2800,6 +2778,7 @@ initializeBackupDirectory() -- Ensure directory exists
 print("Starting main NEAT training loop...")
 while true do
     -- Store current level before starting the generation
+    Replay = false
     local trainingWorld = currentWorld
     local trainingLevel = currentLevel
 
