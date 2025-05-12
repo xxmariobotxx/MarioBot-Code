@@ -1,5 +1,10 @@
 md5 = require "md5"
 
+local OperModeAddr = 0x0770
+local Joypad1Addr = 0x06FC
+local TitleScreenModeValue = 0
+local GameModeValue = 1
+
 LostLevels = 0
 Player = 1
 
@@ -17,6 +22,9 @@ particles = {} --Little particles for fireworks when Mario makes a new max fitne
 sparksPending = false --This is used when waiting for turbo to return to normal speed for celebration when Mario makes a new max fitness
 maxFitnessPerArea = {} --A dictionary to store max fitness, X, and Y for each area.
 castleVictoryTime = 0
+local gameStartedAndStateSaved = false
+local framesToWaitAfterStart = 5
+levelWinnersCache = {}
 
 InitialMutationRates = {
 	linkInputBox=0.1,
@@ -79,6 +87,147 @@ currentTurbo = false
 dirsep = "\\" --forward or backward slash for file separation? depends on OS
 
 ProgramStartTime = os.time()
+
+function ensureInitialSavestate()
+    print("Ensuring consistent game start and initial savestate creation...")
+    local currentOperMode = memory.readbyte(OperModeAddr)
+
+    -- 1. Check if NOT on the title screen/demo. If so, POWER CYCLE.
+    if currentOperMode ~= TitleScreenModeValue then
+        print("Not on title screen/demo (OperMode=" .. currentOperMode .. "). Power cycling emulator...")
+        emu.poweron()
+        print("Waiting for NMI/Frame Counter activity after power cycle...")
+
+        -- Wait until FrameCounter ($09) starts incrementing reliably
+        local frameCounter = memory.readbyte(0x09)
+        local stableFrames = 0
+        local requiredStableFrames = 5
+        local poweronWaitFrames = 0
+        local maxPoweronWait = 900 -- 15 seconds
+
+        while stableFrames < requiredStableFrames do
+            coroutine.yield()
+            poweronWaitFrames = poweronWaitFrames + 1
+            local newFrameCounter = memory.readbyte(0x09)
+            if newFrameCounter ~= frameCounter then
+                if (newFrameCounter > frameCounter) or (newFrameCounter < 20 and frameCounter > 230) then
+                     stableFrames = stableFrames + 1
+                else
+                    stableFrames = 0 -- Reset if counter decreases unexpectedly (except wraparound)
+                end
+                frameCounter = newFrameCounter
+            else
+                 stableFrames = 0 -- Reset if counter stalls
+            end
+            if poweronWaitFrames > maxPoweronWait then
+                print("ERROR: Timed out waiting for stable FrameCounter activity after poweron. Aborting.")
+                return false
+            end
+        end
+        print("Frame Counter active (" .. stableFrames .. " stable increments seen). Emulator likely ready.")
+        print("Applying input sequence post-power cycle...")
+
+        print("Clearing input for 60 frames...")
+        for i = 1, 60 do
+            joypad.set(Player, {})
+            coroutine.yield()
+        end
+
+        print("Pressing and holding Start for 30 frames...")
+        for i = 1, 30 do
+            joypad.set(Player, {start = true})
+            coroutine.yield()
+        end
+
+        print("Releasing Start...")
+        joypad.set(Player, {})
+        for _ = 1, 5 do coroutine.yield() end -- Small buffer after release
+
+        -- Verify transition after power cycle + input
+        currentOperMode = memory.readbyte(OperModeAddr)
+        if currentOperMode == TitleScreenModeValue then
+            print("ERROR: Power cycled, but failed to transition off title screen after input. Aborting.")
+            return false
+        end
+        print("Mode changed after power cycle (OperMode=" .. currentOperMode .. ").")
+
+    -- 2. Handle the case where we start on the Title Screen or in the Demo
+    else
+         print("On title screen or in demo (OperMode=" .. currentOperMode .. "). Attempting to exit demo if active...")
+
+         for i = 1, 5 do -- Press Start for 5 frames
+             joypad.set(Player, {start = true})
+             coroutine.yield()
+         end
+         joypad.set(Player, {}) -- Release Start
+         print("Waiting after brief Start press...")
+         for i = 1, 20 do -- Wait 20 frames for game to potentially return to static title
+             joypad.set(Player, {})
+             coroutine.yield()
+         end
+         print("Brief wait finished. Applying main start sequence...")
+
+         -- Wait 60 frames with no input
+         print("Clearing input for 60 frames...")
+         for i = 1, 60 do
+             joypad.set(Player, {})
+             coroutine.yield()
+         end
+
+         -- Press and Hold Start for 30 frames
+         print("Pressing and holding Start for 30 frames...")
+         for i = 1, 30 do
+             joypad.set(Player, {start = true})
+             coroutine.yield()
+         end
+
+         -- Release Start
+         print("Releasing Start...")
+         joypad.set(Player, {})
+         for _ = 1, 5 do coroutine.yield() end -- Small buffer after release
+
+         -- Verify transition after title screen/demo + input sequence
+         currentOperMode = memory.readbyte(OperModeAddr)
+         if currentOperMode == TitleScreenModeValue then
+             print("ERROR: Started on title screen/demo, but failed to transition after full input sequence. Aborting.")
+             return false
+         end
+         print("Mode changed from Title Screen/Demo (OperMode=" .. currentOperMode .. ").")
+    end
+
+    -- 3. Verify we are now in Game Mode (or wait briefly if needed)
+    print("Verifying Game Mode...")
+    local finalMode = memory.readbyte(OperModeAddr)
+    local waitFramesVerify = 0
+    local maxWaitVerify = 60 -- Increased slightly, just in case transitions take longer
+
+    while finalMode ~= GameModeValue do
+        coroutine.yield()
+        finalMode = memory.readbyte(OperModeAddr)
+        waitFramesVerify = waitFramesVerify + 1
+        if waitFramesVerify > maxWaitVerify then
+            print("ERROR: Did not reach Game Mode ("..GameModeValue..") after input sequence. Final Mode: " .. finalMode .. ". Aborting.")
+            return false -- Indicate failure
+        end
+        -- Optional: Check if we somehow fell back to title screen during verification wait
+        if finalMode == TitleScreenModeValue and waitFramesVerify > 10 then
+            print("ERROR: Transitioned off title screen, but fell back during verification wait. Aborting.")
+            return false
+        end
+    end
+
+    -- 4. Game mode reached. Wait a few frames for stability then Save the initial state.
+    print("Game mode reached (OperMode=" .. finalMode .. "). Waiting briefly before saving state...")
+    for _ = 1, framesToWaitAfterStart do coroutine.yield() end -- Use the existing variable
+
+    print("Saving initial state to slot " .. savestateSlot)
+    -- Re-create savestate object just before saving to ensure it's valid
+    savestateObj = savestate.object(savestateSlot)
+    savestate.save(savestateObj)
+    print("Initial savestate created successfully.")
+    gameStartedAndStateSaved = true -- Set the flag indicating success
+    return true -- Indicate success
+end
 
 --Stuff for getting inputs to the AI
 function platformSize() --Finds whether the platforms are large or small in the current level
@@ -291,6 +440,128 @@ function initPool() --The pool contains all data for the genetics of the AI
 	pool.breakthroughZ = ""
 	pool.breakthroughfiles = {}
 end
+
+local initStateOK = ensureInitialSavestate()
+if not initStateOK then
+    -- Stop the script if the initial state setup failed
+    print("Aborting script due to initial state setup failure.")
+    return -- Use 'return' if this is the main chunk, or error() if inside another function
+end
+
+-- Searches for a winner genome file within a specific level's backup directory.
+function findWinnerFile(directory, levelname) -- Takes directory and levelname as args
+    local command = ""
+
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. directory .. '" /b /a-d 2> nul'
+    else
+        command = 'find "' .. directory .. '" -maxdepth 0 -type d -print 2> /dev/null' -- Check if the base dir exists
+    end
+
+    -- First check if the directory itself exists to avoid errors listing its contents
+    local dir_exists_pipe = io.popen(command)
+    local dir_exists = false
+    if dir_exists_pipe then
+        if dir_exists_pipe:read("*a") ~= "" then -- Check if command returned anything
+           dir_exists = true
+        end
+        dir_exists_pipe:close()
+    end
+
+    if not dir_exists then
+        print("Directory does not exist: " .. directory)
+        return nil
+    end
+
+    -- If directory exists, list its *files* to find winners
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. directory .. '" /b /a-d 2> nul' -- List files only now
+    else
+         command = 'ls -p "' .. directory .. '" | grep -v / 2> /dev/null' -- List files only (no trailing /)
+    end
+
+    local pipe = io.popen(command)
+    if not pipe then
+       -- This shouldn't happen if dir_exists check passed, but good to be safe
+       print("Warning: Could not list files in directory: " .. directory)
+       return nil
+    end
+
+    local winnerFile = nil
+    local castleWinnerFile = nil -- Prioritize castle winners
+
+    for filename in pipe:lines() do
+        -- Check for winner patterns
+        if filename:match("_CastleWinner%.lua$") then
+            castleWinnerFile = directory .. dirsep .. filename
+            print("Found Castle Winner: " .. filename)
+            break -- Found the best kind of winner
+        elseif filename:match("_Winner%.lua$") and not winnerFile then -- Only store the first non-castle winner found
+            winnerFile = directory .. dirsep .. filename
+            print("Found Level Winner: " .. filename)
+        end
+    end
+    pipe:close()
+
+    -- Return castle winner if found, otherwise the regular winner (or nil)
+    return castleWinnerFile or winnerFile
+end
+
+
+-- Function to scan all existing backup directories and populate the cache
+function scanForAllWinners()
+    print("Scanning existing backup directories for winners...")
+    levelWinnersCache = {} -- Clear previous cache if rescanning
+    local backupsDir = "backups"
+    local command = ""
+
+    -- Command to list subdirectories within the backups directory
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. backupsDir .. '" /b /ad 2> nul'
+    else
+        command = 'find "' .. backupsDir .. '" -maxdepth 1 -mindepth 1 -type d -print 2> /dev/null'
+    end
+
+    local pipe = io.popen(command)
+    if not pipe then
+        print("Warning: Could not list backup directory: " .. backupsDir .. ". No winners cached.")
+        return
+    end
+
+    for dirEntry in pipe:lines() do
+        -- Extract the base directory name from the full path if necessary
+        local levelDirName = dirEntry:match("([^\\/]+)$") -- Get the last part of the path
+
+        if levelDirName then
+            local world, level, llPrefix
+            local levelKey = nil
+
+            -- Try matching W-L
+            world, level = levelDirName:match("(%d+)-(%d+)$")
+            if world then
+				levelKey = world .. "-" .. level
+            end
+
+            if levelKey then
+                local fullDirPath = backupsDir .. dirsep .. levelDirName -- Full path for findWinnerFile
+
+                -- Call the existing file finder for this specific directory
+                local winner = findWinnerFile(fullDirPath, levelDirName)
+                if winner then
+                    levelWinnersCache[levelKey] = winner -- Use W-L as the key
+                    print("Cached winner for " .. levelKey .. ": " .. winner)
+                end
+            else
+                print("Skipping directory, doesn't match W-L or LLW-L pattern: " .. levelDirName)
+            end
+        end
+        coroutine.yield() -- Yield occasionally to prevent freezing UI
+    end
+    pipe:close()
+    print("Winner scan complete.")
+end
+
+scanForAllWinners()
 
 function newSpecies() --Each species is a group of genomes that are similar
     local species = {}
@@ -1054,6 +1325,50 @@ function writeALLGSIDs()
 	end
 end
 
+function findWinnerForLevel(world, level)
+    local levelname = world .. "-" .. level
+    if LostLevels == 1 then levelname = "LL" .. levelname end -- Handle Lost Levels naming if needed
+    local directory = "backups" .. dirsep .. levelname
+    print("Searching for winner in: " .. directory)
+
+    local command = ""
+    -- Check the operating system for directory listing command
+    if os.getenv("OS") and os.getenv("OS"):match("Windows") then
+        command = 'dir "' .. directory .. '" /b /a-d' -- /a-d excludes directories
+    else
+        command = 'ls -p "' .. directory .. '" | grep -v /' -- -p adds / to dirs, grep excludes them
+    end
+
+    -- Use io.popen to execute the command and read output
+    local pipe = io.popen(command)
+    if not pipe then
+        print("Warning: Could not list directory: " .. directory)
+        return nil -- Directory might not exist yet, which is fine
+    end
+
+    local winnerFile = nil
+    for filename in pipe:lines() do
+        -- Check for winner patterns, prioritizing CastleWinner if both exist
+        if filename:match("_CastleWinner%.lua$") then
+            winnerFile = directory .. dirsep .. filename
+            print("Found Castle Winner: " .. filename)
+            break -- Found the best kind of winner
+        elseif filename:match("_Winner%.lua$") then
+             winnerFile = directory .. dirsep .. filename
+             print("Found Level Winner: " .. filename)
+             -- Don't break here, keep looking in case there's a CastleWinner
+        end
+    end
+    pipe:close()
+
+    if winnerFile then
+        print("Selected winner file: " .. winnerFile)
+    else
+        print("No winner file found for " .. levelname)
+    end
+    return winnerFile
+end
+
 function newGeneration() --runs the evolutionary algorithms to advance a generation
 	maxNewGenProgress = -1
 	newgenProgress(0)
@@ -1540,16 +1855,15 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				if beatlevelFile then
 					beatlevelFile:close()
 				end
-			end
-
-			local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
-			if winnersFile then
-				local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
-				winnersFile:write(winnerFilename.."\n")
-				winnersFile:close()
-				print("Updated winners.txt with latest winner.")
-			else
-				print("Error opening winners.txt for writing.")
+				local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
+				if winnersFile then
+					local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
+					winnersFile:write(winnerFilename.."\n")
+					winnersFile:close()
+					print("Updated winners.txt with latest winner.")
+				else
+					print("Error opening winners.txt for writing.")
+				end
 			end
 		end
 
@@ -1568,16 +1882,16 @@ function playGenome(genome) --Run a genome through an attempt at the level
 				if beatlevelFile then
 					beatlevelFile:close()
 				end
-			end
 
-			local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
-			if winnersFile then
-				local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
-				winnersFile:write(winnerFilename.."\n")
-				winnersFile:close()
-				print("Updated winners.txt with latest winner.")
-			else
-				print("Error opening winners.txt for writing.")
+				local winnersFile = io.open("backups"..dirsep.."winners.txt", "w")
+				if winnersFile then
+					local winnerFilename = pool.breakthroughfiles[#pool.breakthroughfiles]
+					winnersFile:write(winnerFilename.."\n")
+					winnersFile:close()
+					print("Updated winners.txt with latest winner.")
+				else
+					print("Error opening winners.txt for writing.")
+				end
 			end
 
 			castleVictoryTime = fitstate.frame --Castle victory timer
@@ -2379,23 +2693,145 @@ end
 
 initLevel()
 initializeBackupDirectory()
+
+print("Starting replay check...")
+Replay = true -- Assume replay mode initially
+
+while Replay do
+    getPositions()
+    levelNameOutput()
+    initializeBackupDirectory() -- Still needed in case the dir wasn't created yet
+
+    local currentLevelKey = currentWorld .. "-" .. currentLevel
+    local winnerFilename = levelWinnersCache[currentLevelKey] -- Fast table lookup
+
+    if winnerFilename then
+        print("Cached winner found for " .. currentLevelKey .. ". Attempting replay.")
+        local loadSuccess, loadError = pcall(dofile, winnerFilename)
+        if not loadSuccess or not loadedgenome then
+            print("ERROR: Failed to load or execute winner file: " .. winnerFilename)
+            print("Load Error: " .. tostring(loadError))
+            print("Stopping replay.")
+            Replay = false
+            break
+        end
+
+        pool.generation = loadedgenome.gen
+		pool.currentSpecies = loadedgenome.s
+		pool.currentGenome = loadedgenome.g
+
+        print("Winner genome loaded. Starting replay for " .. currentWorld .. "-" .. currentLevel)
+        TurboMin = 0
+        TurboMax = 0
+        turboUpdatedForNetwork = {}
+        maxFitnessPerArea = {}
+        pool.breakthroughfiles = {}
+        turboOutput()
+
+        local wonLevel = playGenome(loadedgenome)
+
+        if wonLevel then
+            print("Replay successful for " .. currentWorld .. "-" .. currentLevel .. ". Preparing for next level.")
+
+            print("Waiting for level transition to complete...")
+            local transitionWaitFrames = 0
+            local maxTransitionWait = 300
+            while memory.readbyte(0x0757) == 1 and transitionWaitFrames < maxTransitionWait do
+                coroutine.yield()
+                transitionWaitFrames = transitionWaitFrames + 1
+            end
+            if transitionWaitFrames >= maxTransitionWait then
+                print("WARN: Waited a long time for prelevel screen to clear, proceeding anyway.")
+            end
+
+            getPositions()
+            print("Transitioned to: World " .. currentWorld .. ", Level " .. currentLevel)
+
+            savestateSlot = savestateSlot + 1
+            if savestateSlot > 9 then savestateSlot = 1 end -- Fixed wraparound logic
+            print("Saving state for start of " .. currentWorld .. "-" .. currentLevel .. " to slot " .. savestateSlot)
+            savestateObj = savestate.object(savestateSlot)
+            savestate.save(savestateObj) -- Save state happens here
+            print("Savestate saved.")
+            -- Loop continues to check the cache for the *new* currentLevelKey
+
+        else
+            print("ERROR: Replay failed (timeout or death) for " .. currentWorld .. "-" .. currentLevel .. ". Stopping replay.")
+            Replay = false
+            break
+        end
+    else
+        print("No cached winner found for " .. currentWorld .. "-" .. currentLevel .. ". Ending replay mode.")
+        Replay = false
+    end
+end
+
+print("Replay phase finished. Preparing for NEAT training on " .. currentWorld .. "-" .. currentLevel)
+TurboMin = 0
+TurboMax = 1
+turboOutput()
+
+initLevel() -- Initialize pool for the first unsolved level
+
+initializeBackupDirectory() -- Ensure directory exists
+
+print("Starting main NEAT training loop...")
 while true do
+    -- Store current level before starting the generation
+    Replay = false
+    local trainingWorld = currentWorld
+    local trainingLevel = currentLevel
+
 	redospectop = pool.generation == 0
 	while not playGeneration(redospectop) do
 		newGeneration()
 		redospectop = false
 	end
+    -- Level completed during TRAINING run
+    local completedLevelKey = trainingWorld .. "-" .. trainingLevel -- Use the stored values
+	print("Level " .. completedLevelKey .. " beaten during training. Saving state and advancing.")
+
+    -- Update Winner Cache
+    if #pool.breakthroughfiles > 0 then
+        local newWinnerFile = pool.breakthroughfiles[#pool.breakthroughfiles]
+        -- Ensure the filename actually contains "_Winner" or "_CastleWinner"
+        if newWinnerFile:match("_Winner%.lua$") or newWinnerFile:match("_CastleWinner%.lua$") then
+             print("Updating winner cache for " .. completedLevelKey .. " with " .. newWinnerFile)
+             levelWinnersCache[completedLevelKey] = newWinnerFile
+         else
+             print("WARN: Last breakthrough file doesn't seem to be a winner file: " .. newWinnerFile)
+         end
+    end
+
+    -- (Rest of the transition wait, savestate, initLevel, etc. remains the same)
+    print("Waiting for level transition to complete...")
+    local transitionWaitFrames = 0
+    local maxTransitionWait = 300
+    while memory.readbyte(0x0757) == 1 and transitionWaitFrames < maxTransitionWait do
+        coroutine.yield()
+        transitionWaitFrames = transitionWaitFrames + 1
+    end
+    if transitionWaitFrames >= maxTransitionWait then
+        print("WARN: Waited a long time for prelevel screen to clear (training), proceeding anyway.")
+    end
+
+    getPositions() -- Update to the new level
+    print("Transitioned to: World " .. currentWorld .. ", Level " .. currentLevel)
+
 	savestateSlot=savestateSlot+1
-	if savestateSlot==10 then savestateSlot=1 end
+	if savestateSlot > 9 then savestateSlot = 1 end
+	print("Saving state for start of " .. currentWorld .. "-" .. currentLevel .. " to slot " .. savestateSlot)
 	savestateObj = savestate.object(savestateSlot)
 	savestate.save(savestateObj)
-	initLevel()
+    print("Savestate saved.")
+
+    initLevel()
 	initializeBackupDirectory()
-	if Replay and #pool.breakthroughfiles == 0 then --This is useful for getting through the generations where Mario does a lot of standing around
+
+	if pool.generation <= 1 then -- Reset turbo if it's the start of training for a level
 		TurboMax = 1
 		turboOutput()
-		Replay = false
-		print("TurboMax set to "..TurboMax)
+		print("TurboMax reset to " .. TurboMax .. " at start of training.")
 	end
 	writeALLGSIDs()
 end
