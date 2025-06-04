@@ -1,7 +1,7 @@
 # MarioBot
 
 ## Transparency
-This project has been refined almost entirely with the help of AI tools such as Google's Gemini and OpenAI's ChatGPT.
+This project has been refined almost entirely with the help of AI tools such as Google's Gemini and OpenAI's ChatGPT and Codex.
 
 ## What
 MarioBot is a NEAT-based program that learns to play **Super Mario Bros.** (1985). An additional version, **LuigI/O**, targets **Super Mario Bros. 3**. These programs began as community projects from Akisame and Electra, building upon SethBling's original *MarI/O* implementation.
