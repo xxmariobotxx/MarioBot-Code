@@ -1,29 +1,19 @@
-Transparency:
-This program has been modified/improved/developed with the use of AIs like Google's Gemini and OpenAI's ChatGPT. Almost entirely so.
+# MarioBot
 
-What:
-This is a NEAT program that learns to play Super Mario Bros. (1985) known as MarioBot. There is also another version of the program that learns to play Super Mario Bros. 3 known as LuigI/O.
+## Transparency
+This project has been refined almost entirely with the help of AI tools such as Google's Gemini and OpenAI's ChatGPT.
 
-These program were first developed by two people on youtube called Akisame, who first developed LuigI/O as I knew it which was improved on from another program called MarI/O created by SethBling, and Electra, though there is not much I know about this person
-other than the fact that she helped Akisame develop LuigI/O.
+## What
+MarioBot is a NEAT-based program that learns to play **Super Mario Bros.** (1985). An additional version, **LuigI/O**, targets **Super Mario Bros. 3**. These programs began as community projects from Akisame and Electra, building upon SethBling's original *MarI/O* implementation.
 
-These programs are written as a lua plugin for an emulator called FCEUX.
+The code runs as a Lua plug-in for the FCEUX emulator. While the SMB3 version remains mostly untouched, this repository focuses on continuing the development of MarioBot for the 1985 game.
 
-The version for Super Mario Bros. 3 is entirely untouuched solely because I enjoy the 1985 version of Super Mario Bros. more than Super Mario Bros. 3. In other words, this repo is specialized in the development of the "MarioBot"
+## Why
+I found this project fascinating after watching the [LuigI/O YouTube channel](https://www.youtube.com/@LuigIO) several years ago. I preferred exploring ROM hacks of the original game rather than moving entirely to Super Mario Bros. 3, so this repository concentrates on that direction.
 
-Why:
-I, personally, thought that this program was cool, very interesting, and enjoyable to watch when a youtuber (https://www.youtube.com/@LuigIO) was streaming it several years ago, and I would have liked it if LuigI/O would have done ROM hacks instead of moving
-onto Super Mario Bros. 3.
+## Goal
+The long-term goal is to advance MarioBot to the point where it can tackle challenging ROM hacks—ideally even kaizo-level hacks—as consistently as possible. Although I am unsure of the ultimate limits of the NEAT approach, I aim to push the program as far as it can go.
 
-Goal:
-The goal that I have in mind for this program is to develop it to the point that this program is able to learn to beat kaizo ROM hacks of Super Mario Bros. (1985).
-
-I'm not certain of the limitations of the NEAT approach to these problems (i.e. if it's possible at all), but I would still like to develop and advance the program to get as close as possible to (consistently) beating these kinds of ROM hacks 
-created by the ROM hacking community.
-
-Limitations (to overcome):
-The current limitations of the program I have found (although not too specifically) are:
--Being unable to beat levels and/or ROMs that are not linear. i.e. if the level involves going left or back and forth, then the program is unlikely to beat the level/game unless I resort to an ungodly amount of hardcoding to get the job done which would defeat
- the purpose of this program.
--Unable to beat levels/games that are overly difficult in nature like kaizo hacks. To give a more concrete example, there is a ROM hack of Super Mario Bros. called Super Mario Forever, more commonly known (I think) as Super Mario Frustration. This should give
- a clear understanding of what I mean by "overly difficult."
+## Current Limitations
+- **Non-linear stages**: Levels that require backtracking or complex navigation are difficult without substantial hardcoding, which would defeat the purpose of the project.
+- **Extreme difficulty**: Very hard or "kaizo" levels—for example, the *Super Mario Forever* (aka *Super Mario Frustration*) hack—are currently beyond the AI's abilities.
